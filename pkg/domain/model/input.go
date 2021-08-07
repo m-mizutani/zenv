@@ -5,7 +5,12 @@ type ExecInput struct {
 	Args    []string
 }
 
+type ListInput struct {
+	EnvVars []*EnvVar
+	Args    []string
+}
+
 type WriteInput struct {
 	Namespace string
-	EnvVar
+	Args      []string
 }

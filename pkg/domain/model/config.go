@@ -1,18 +1,34 @@
 package model
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/m-mizutani/goerr"
+)
 
 type Config struct {
 	KeychainNamespacePrefix string
-	ConfigFilePath          string
+	DotEnvFile              string
 }
 
 const keychainNamespaceHead = "@"
 
-func IsKeychainNamespace(name string) bool {
-	return strings.HasPrefix(name, keychainNamespaceHead)
+func trimNamespace(name string) string {
+	return strings.TrimPrefix(name, keychainNamespaceHead)
+}
+
+func ValidateKeychainNamespace(name string) error {
+	if !strings.HasPrefix(name, keychainNamespaceHead) {
+		return goerr.Wrap(ErrKeychainInvalidNamespace).With("reason", "@ is required as prefix")
+	}
+	namespace := trimNamespace(name)
+	if len(namespace) == 0 {
+		return goerr.Wrap(ErrKeychainInvalidNamespace).With("reason", "no name after @")
+	}
+
+	return nil
 }
 
 func KeychainNamespace(prefix, name string) string {
-	return prefix + strings.TrimPrefix(name, keychainNamespaceHead)
+	return prefix + trimNamespace(name)
 }

@@ -66,8 +66,9 @@ func (x *Infrastructure) GetKeyChainValues(namespace string) ([]*model.EnvVar, e
 			return nil, goerr.Wrap(model.ErrKeychainQueryFailed).With("account", result.Account)
 		}
 		envVars = append(envVars, &model.EnvVar{
-			Key:   result.Account,
-			Value: string(data[0].Data),
+			Key:    result.Account,
+			Value:  string(data[0].Data),
+			Secret: true,
 		})
 	}
 

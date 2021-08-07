@@ -1,14 +1,14 @@
 package controller
 
 import (
-	"log"
+	"errors"
 	"os"
-	"path/filepath"
 
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/interfaces"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
 	"github.com/m-mizutani/zenv/pkg/usecase"
+	"github.com/m-mizutani/zenv/pkg/utils"
 
 	cli "github.com/urfave/cli/v2"
 )
@@ -26,6 +26,7 @@ func New() *Controller {
 type cliConfig struct {
 	execInput  model.ExecInput
 	writeInput model.WriteInput
+	ListMode   bool
 }
 
 func (x *Controller) CLI(args []string) {
@@ -33,8 +34,9 @@ func (x *Controller) CLI(args []string) {
 	var appCfg model.Config
 
 	app := &cli.App{
-		Name:  "zenv",
-		Usage: "Environment variable manager",
+		Name:    "zenv",
+		Usage:   "Environment variable manager",
+		Version: model.AppVersion,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "write",
@@ -50,12 +52,19 @@ func (x *Controller) CLI(args []string) {
 				Value:       "zenv.",
 			},
 
+			&cli.BoolFlag{
+				Name:        "list",
+				Usage:       "show list of loaded environment variabes",
+				Aliases:     []string{"l"},
+				Destination: &cliCfg.ListMode,
+			},
+
 			&cli.StringFlag{
-				Name:        "config",
-				Usage:       "Config file path",
-				Aliases:     []string{"c"},
-				Destination: &appCfg.ConfigFilePath,
-				Value:       filepath.Join(os.Getenv("HOME"), ".zenv"),
+				Name:        "env-file",
+				Usage:       "specify dotenv file",
+				Aliases:     []string{"e"},
+				Destination: &appCfg.DotEnvFile,
+				Value:       model.DefaultDotEnvFilePath,
 			},
 		},
 
@@ -64,12 +73,13 @@ func (x *Controller) CLI(args []string) {
 
 			switch {
 			case cliCfg.writeInput.Namespace != "":
-				if v := c.Args().Get(0); v != "" {
-					cliCfg.writeInput.Key = v
-				} else {
-					return goerr.Wrap(model.ErrNotEnoughArgument, "key name is required")
-				}
+				cliCfg.writeInput.Args = c.Args().Slice()
 				return x.usecase.Write(&cliCfg.writeInput)
+
+			case cliCfg.ListMode:
+				return x.usecase.List(&model.ListInput{
+					Args: c.Args().Slice(),
+				})
 
 			default:
 				cliCfg.execInput.Args = c.Args().Slice()
@@ -78,8 +88,15 @@ func (x *Controller) CLI(args []string) {
 		},
 	}
 
-	err := app.Run(os.Args)
-	if err != nil {
-		log.Fatal(err)
+	if err := app.Run(os.Args); err != nil {
+		ev := utils.Logger.Error()
+
+		var goErr *goerr.Error
+		if errors.As(err, &goErr) {
+			for k, v := range goErr.Values() {
+				ev = ev.Interface(k, v)
+			}
+		}
+		ev.Msg(err.Error())
 	}
 }
