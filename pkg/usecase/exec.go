@@ -9,7 +9,9 @@ import (
 
 func replaceArguments(envVars []*model.EnvVar, args []string) []string {
 	// Sort by descending order of Key length
-	vars := envVars[:]
+	vars := make([]*model.EnvVar, len(envVars))
+	copy(vars, envVars)
+
 	sort.Slice(vars, func(i, j int) bool {
 		return len(vars[i].Key) > len(envVars[j].Key)
 	})
