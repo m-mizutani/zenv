@@ -1,4 +1,4 @@
-# zenv [CI](https://github.com/m-mizutani/zenv/actions/workflows/test.yml/badge.svg)  [![Go Report Card](https://goreportcard.com/badge/github.com/m-mizutani/zenv)]
+# zenv ![CI](https://github.com/m-mizutani/zenv/actions/workflows/test.yml/badge.svg) [![Go Report Card](https://goreportcard.com/badge/github.com/m-mizutani/zenv)](https://goreportcard.com/report/github.com/m-mizutani/zenv)
 
 `zenv` is more powerful `env` command to manage environment variables in CLI.
 
