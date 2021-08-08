@@ -125,3 +125,26 @@ NUMBER=five
 
 	})
 }
+
+func TestReplacement(t *testing.T) {
+	t.Run("exec with replacement values", func(t *testing.T) {
+		uc, mock := usecase.NewWithMock()
+		mock.ExecMock = func(vars []*model.EnvVar, args []string) error {
+			require.Len(t, args, 4)
+			assert.Equal(t, "test", args[0])
+			assert.Equal(t, "five", args[1])
+			assert.Equal(t, "onetime", args[2])
+			assert.Equal(t, "%BLUE", args[3])
+
+			return nil
+		}
+
+		require.NoError(t, uc.Exec(&model.ExecInput{
+			EnvVars: []*model.EnvVar{
+				{Key: "VAR", Value: "one"},
+				{Key: "VARIABLE", Value: "five"},
+			},
+			Args: []string{"test", "%VARIABLE", "%VARtime", "%BLUE"},
+		}))
+	})
+}

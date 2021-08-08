@@ -1,10 +1,30 @@
 package usecase
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/m-mizutani/zenv/pkg/domain/model"
 )
+
+func replaceArguments(envVars []*model.EnvVar, args []string) []string {
+	// Sort by descending order of Key length
+	vars := envVars[:]
+	sort.Slice(vars, func(i, j int) bool {
+		return len(vars[i].Key) > len(envVars[j].Key)
+	})
+
+	replaced := args[:]
+
+	for _, v := range vars {
+		key := "%" + v.Key
+		for i := range replaced {
+			replaced[i] = strings.Replace(replaced[i], key, v.Value, -1)
+		}
+	}
+
+	return replaced
+}
 
 func (x *Usecase) Exec(input *model.ExecInput) error {
 	args, vars, err := x.parseArgs(input.Args)
@@ -18,7 +38,9 @@ func (x *Usecase) Exec(input *model.ExecInput) error {
 		return model.ErrNotEnoughArgument
 	}
 
-	if err := x.infra.Exec(envVars, args); err != nil {
+	newArgs := replaceArguments(envVars, args)
+
+	if err := x.infra.Exec(envVars, newArgs); err != nil {
 		return err
 	}
 
