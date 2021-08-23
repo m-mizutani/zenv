@@ -14,7 +14,7 @@ func (x *Infrastructure) PutKeyChainValues(envVars []*model.EnvVar, namespace st
 		item.SetSecClass(keychain.SecClassGenericPassword)
 		item.SetService(namespace)
 		item.SetAccount(v.Key)
-		item.SetDescription("altenv")
+		item.SetDescription("zenv")
 		item.SetData([]byte(v.Value))
 		item.SetAccessible(keychain.AccessibleWhenUnlocked)
 		item.SetSynchronizable(keychain.SynchronizableNo)

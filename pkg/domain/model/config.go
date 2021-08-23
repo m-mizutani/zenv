@@ -1,6 +1,7 @@
 package model
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/m-mizutani/goerr"
@@ -24,6 +25,16 @@ func ValidateKeychainNamespace(name string) error {
 	namespace := trimNamespace(name)
 	if len(namespace) == 0 {
 		return goerr.Wrap(ErrKeychainInvalidNamespace).With("reason", "no name after @")
+	}
+
+	return nil
+}
+
+var envVarNameRegex = regexp.MustCompile("^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+func ValidateEnvVarKeyName(name string) error {
+	if !envVarNameRegex.MatchString(name) {
+		return goerr.Wrap(ErrEnvVarInvalidName).With("name", name)
 	}
 
 	return nil

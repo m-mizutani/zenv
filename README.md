@@ -2,7 +2,7 @@
 
 `zenv` is more powerful `env` command to manage environment variables in CLI.
 
-- Save and get secret values in/from Keychain (inspired by [envchain](https://github.com/sorah/envchain))
+- Securely save, generate and get secret values in/from Keychain (inspired by [envchain](https://github.com/sorah/envchain))
 - Load `.env` file to import environment variables
 
 ## Install
@@ -17,9 +17,9 @@ go get github.com/m-mizutani/zenv
 
 Save values.
 ```sh
-$ zenv -w @aws-account AWS_SECRET_ACCESS_KEY
+$ zenv secret write @aws-account AWS_SECRET_ACCESS_KEY
 Value: ***
-$ zenv -w @aws-account AWS_ACCESS_KEY_ID
+$ zenv secret @aws-account AWS_ACCESS_KEY_ID
 Value: ***
 ```
 
@@ -28,12 +28,24 @@ Use values.
 $ zenv @aws-account aws s3 ls
 ```
 
-### List loaded environment variables
+### Generate random secure value
 
-`-l` option output list of all loaded environment variables. Mask secret values with `*` if the variable is loaded from Keychain.
+`generate` subcommand can generate random value like token and save to KeyChain.
 
 ```sh
-$ zenv -l @aws-account AWS_REGION=ap-northeast-1
+$ zenv secret generate @my-project MYSQL_PASS
+$ zenv secret generate @my-project -n 8 TMP_TOKEN # set length to 8
+$ zenv list @my-project
+MYSQL_PASS=******************************** (hidden)
+TMP_TOKEN=******** (hidden)
+```
+
+### List loaded environment variables
+
+`list` subcommand output list of all loaded environment variables. Mask secret values with `*` if the variable is loaded from Keychain.
+
+```sh
+$ zenv list @aws-account AWS_REGION=ap-northeast-1
 AWS_ACCESS_KEY_ID=******************** (hidden)
 AWS_SECRET_ACCESS_KEY=**************************************** (hidden)
 AWS_REGION=ap-northeast-1
@@ -44,7 +56,7 @@ AWS_REGION=ap-northeast-1
 ```sh
 $ cat .env
 AWS_REGION=ap-northeast-1
-$ zenv -l
+$ zenv list
 AWS_REGION=ap-northeast-1
 ```
 
@@ -60,4 +72,21 @@ $ zenv -l
 AWS_ACCESS_KEY_ID=******************** (hidden)
 AWS_SECRET_ACCESS_KEY=**************************************** (hidden)
 AWS_REGION=ap-northeast-1
+```
+
+### Replace value in arguments with loaded environment variable
+
+`zenv` replaces words having `%` prefix with loaded environment variable.
+
+```sh
+$ cat .env
+TOKEN=abc123
+$ zenv curl -v -H "Authorization: bearer %TOKEN" http://localhost:1234
+(snip)
+> GET /api/v1/alert HTTP/1.1
+> Host: localhost:8080
+> User-Agent: curl/7.64.1
+> Accept: */*
+> Authorization: bearer abc123
+(snip)
 ```

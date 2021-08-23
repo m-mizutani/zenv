@@ -10,7 +10,13 @@ type ListInput struct {
 	Args    []string
 }
 
-type WriteInput struct {
+type WriteSecretInput struct {
 	Namespace string
-	Args      []string
+	Key       string
+}
+
+type GenerateSecretInput struct {
+	Namespace string
+	Key       string
+	Length    int64
 }
