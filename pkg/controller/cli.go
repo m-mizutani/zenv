@@ -107,6 +107,15 @@ func (x *Controller) cmdSecret() *cli.Command {
 			{
 				Name:    "generate",
 				Aliases: []string{"g", "gen"},
+				Flags: []cli.Flag{
+					&cli.Int64Flag{
+						Name:        "length",
+						Aliases:     []string{"n"},
+						Usage:       "variable length",
+						Destination: &genInput.Length,
+						Value:       32,
+					},
+				},
 				Action: func(c *cli.Context) error {
 					if c.NArg() != 2 {
 						return goerr.Wrap(model.ErrInvalidArgumentFormat, "generate [namespace] [key]")

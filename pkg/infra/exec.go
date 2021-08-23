@@ -25,6 +25,7 @@ func (x *Infrastructure) Exec(vars []*model.EnvVar, args []string) error {
 		envvars = append(envvars, fmt.Sprintf("%s=%s", v.Key, v.Value))
 	}
 
+	/* #nosec */
 	if err := syscall.Exec(binary, args, envvars); err != nil {
 		return goerr.Wrap(err).With("args", args)
 	}

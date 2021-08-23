@@ -1,8 +1,8 @@
 package usecase
 
 import (
+	"crypto/rand"
 	"encoding/base64"
-	"math/rand"
 
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
