@@ -2,7 +2,7 @@
 
 `zenv` is more powerful `env` command to manage environment variables in CLI.
 
-- Save and get secret values in/from Keychain (inspired by [envchain](https://github.com/sorah/envchain))
+- Securely save, generate and get secret values in/from Keychain (inspired by [envchain](https://github.com/sorah/envchain))
 - Load `.env` file to import environment variables
 
 ## Install
