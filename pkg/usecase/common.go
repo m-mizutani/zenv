@@ -34,7 +34,7 @@ func loadDotEnv(filepath string, readAll func(string) ([]byte, error)) ([]string
 	return args, nil
 }
 
-func (x *Usecase) loadEnvVar(arg string) ([]*model.EnvVar, error) {
+func (x *usecase) loadEnvVar(arg string) ([]*model.EnvVar, error) {
 	switch {
 	case strings.Index(arg, envVarSeparator) > 0:
 		v := strings.Split(arg, envVarSeparator)
@@ -61,7 +61,7 @@ func (x *Usecase) loadEnvVar(arg string) ([]*model.EnvVar, error) {
 	}
 }
 
-func (x *Usecase) parseArgs(args []string) ([]string, []*model.EnvVar, error) {
+func (x *usecase) parseArgs(args []string) ([]string, []*model.EnvVar, error) {
 	var envVars []*model.EnvVar
 
 	if x.config.DotEnvFile != "" {

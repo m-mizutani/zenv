@@ -25,9 +25,9 @@ func TestWrite(t *testing.T) {
 		}
 
 		mock.PromptMock = func(msg string) string { return "blue" }
-		require.NoError(t, uc.Write(&model.WriteInput{
+		require.NoError(t, uc.Write(&model.WriteSecretInput{
 			Namespace: "@tower",
-			Args:      []string{"COLOR"},
+			Key:       "COLOR",
 		}))
 
 		require.NoError(t, uc.Exec(&model.ExecInput{
@@ -38,9 +38,61 @@ func TestWrite(t *testing.T) {
 
 	t.Run("keychain namespace not found", func(t *testing.T) {
 		uc, _ := usecase.NewWithMock()
-		require.Error(t, uc.Exec(&model.ExecInput{
+		require.ErrorIs(t, uc.Exec(&model.ExecInput{
 			EnvVars: []*model.EnvVar{},
 			Args:    []string{"@tower", "this", "test"},
+		}), model.ErrKeychainNotFound)
+	})
+}
+
+func TestGenerate(t *testing.T) {
+	t.Run("generate random secure variable", func(t *testing.T) {
+		uc, mock := usecase.NewWithMock()
+		mock.PutKeyChainValuesMock = func(envVars []*model.EnvVar, namespace string) error {
+			require.Len(t, envVars, 1)
+			assert.Equal(t, "zenv.bridge", namespace)
+			assert.Equal(t, "SECRET", envVars[0].Key)
+			assert.Len(t, envVars[0].Value, 24)
+			return nil
+		}
+		require.NoError(t, uc.Generate(&model.GenerateSecretInput{
+			Namespace: "@bridge",
+			Key:       "SECRET",
+			Length:    24,
 		}))
+	})
+
+	t.Run("fail if length <= 0", func(t *testing.T) {
+		uc, _ := usecase.NewWithMock()
+		require.ErrorIs(t, uc.Generate(&model.GenerateSecretInput{
+			Namespace: "@bridge",
+			Key:       "SECRET",
+			Length:    0,
+		}), model.ErrInvalidArgument)
+	})
+
+	t.Run("fail if length > 2^16", func(t *testing.T) {
+		uc, _ := usecase.NewWithMock()
+		require.ErrorIs(t, uc.Generate(&model.GenerateSecretInput{
+			Namespace: "@bridge",
+			Key:       "SECRET",
+			Length:    65536,
+		}), model.ErrInvalidArgument)
+	})
+
+	t.Run("fail if key is empty", func(t *testing.T) {
+		uc, _ := usecase.NewWithMock()
+		require.ErrorIs(t, uc.Generate(&model.GenerateSecretInput{
+			Namespace: "@bridge",
+			Length:    24,
+		}), model.ErrEnvVarInvalidName)
+	})
+
+	t.Run("fail if namespaec is empty", func(t *testing.T) {
+		uc, _ := usecase.NewWithMock()
+		require.ErrorIs(t, uc.Generate(&model.GenerateSecretInput{
+			Key:    "blue",
+			Length: 24,
+		}), model.ErrKeychainInvalidNamespace)
 	})
 }

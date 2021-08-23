@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/m-mizutani/goerr"
-	"github.com/m-mizutani/zenv/pkg/domain/interfaces"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
 	"github.com/m-mizutani/zenv/pkg/usecase"
 	"github.com/m-mizutani/zenv/pkg/utils"
@@ -14,7 +13,7 @@ import (
 )
 
 type Controller struct {
-	usecase interfaces.Usecase
+	usecase usecase.Interface
 }
 
 func New() *Controller {
@@ -23,14 +22,7 @@ func New() *Controller {
 	}
 }
 
-type cliConfig struct {
-	execInput  model.ExecInput
-	writeInput model.WriteInput
-	ListMode   bool
-}
-
 func (x *Controller) CLI(args []string) {
-	var cliCfg cliConfig
 	var appCfg model.Config
 
 	app := &cli.App{
@@ -39,24 +31,11 @@ func (x *Controller) CLI(args []string) {
 		Version: model.AppVersion,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:        "write",
-				Usage:       "Write variables to keychain [-w namespace key]",
-				Aliases:     []string{"w"},
-				Destination: &cliCfg.writeInput.Namespace,
-			},
-			&cli.StringFlag{
 				Name:        "keychian-prefix",
 				Usage:       "Keychain name prefix",
 				Aliases:     []string{"k"},
 				Destination: &appCfg.KeychainNamespacePrefix,
 				Value:       "zenv.",
-			},
-
-			&cli.BoolFlag{
-				Name:        "list",
-				Usage:       "show list of loaded environment variabes",
-				Aliases:     []string{"l"},
-				Destination: &cliCfg.ListMode,
 			},
 
 			&cli.StringFlag{
@@ -67,24 +46,18 @@ func (x *Controller) CLI(args []string) {
 				Value:       model.DefaultDotEnvFilePath,
 			},
 		},
-
-		Action: func(c *cli.Context) error {
+		Commands: []*cli.Command{
+			x.cmdSecret(),
+			x.cmdList(),
+		},
+		Before: func(c *cli.Context) error {
 			x.usecase.SetConfig(&appCfg)
-
-			switch {
-			case cliCfg.writeInput.Namespace != "":
-				cliCfg.writeInput.Args = c.Args().Slice()
-				return x.usecase.Write(&cliCfg.writeInput)
-
-			case cliCfg.ListMode:
-				return x.usecase.List(&model.ListInput{
-					Args: c.Args().Slice(),
-				})
-
-			default:
-				cliCfg.execInput.Args = c.Args().Slice()
-				return x.usecase.Exec(&cliCfg.execInput)
-			}
+			return nil
+		},
+		Action: func(c *cli.Context) error {
+			var input model.ExecInput
+			input.Args = c.Args().Slice()
+			return x.usecase.Exec(&input)
 		},
 	}
 
@@ -98,5 +71,51 @@ func (x *Controller) CLI(args []string) {
 			}
 		}
 		ev.Msg(err.Error())
+	}
+}
+
+func (x *Controller) cmdList() *cli.Command {
+	return &cli.Command{
+		Name: "list",
+		Action: func(c *cli.Context) error {
+			return x.usecase.List(&model.ListInput{
+				Args: c.Args().Slice(),
+			})
+		},
+	}
+}
+
+func (x *Controller) cmdSecret() *cli.Command {
+	var genInput model.GenerateSecretInput
+	var writeInput model.WriteSecretInput
+
+	return &cli.Command{
+		Name: "secret",
+		Subcommands: []*cli.Command{
+			{
+				Name:    "write",
+				Aliases: []string{"w"},
+				Action: func(c *cli.Context) error {
+					if c.NArg() != 2 {
+						return goerr.Wrap(model.ErrInvalidArgumentFormat, "write [namespace] [key]")
+					}
+					writeInput.Namespace = c.Args().Get(0)
+					writeInput.Key = c.Args().Get(1)
+					return x.usecase.Write(&writeInput)
+				},
+			},
+			{
+				Name:    "generate",
+				Aliases: []string{"g", "gen"},
+				Action: func(c *cli.Context) error {
+					if c.NArg() != 2 {
+						return goerr.Wrap(model.ErrInvalidArgumentFormat, "generate [namespace] [key]")
+					}
+					genInput.Namespace = c.Args().Get(0)
+					genInput.Key = c.Args().Get(1)
+					return x.usecase.Generate(&genInput)
+				},
+			},
+		},
 	}
 }
