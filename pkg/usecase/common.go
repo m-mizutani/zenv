@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	envVarSeparator = "="
+	envVarSeparator  = "="
+	envVarFileLoader = "@"
 )
 
 func loadDotEnv(filepath string, readAll func(string) ([]byte, error)) ([]string, error) {
@@ -92,6 +93,16 @@ func (x *usecase) parseArgs(args []string) ([]string, []*model.EnvVar, error) {
 		}
 		envVars = append(envVars, vars...)
 		last = idx + 1
+	}
+
+	for _, v := range envVars {
+		if strings.HasPrefix(v.Value, envVarFileLoader) {
+			body, err := x.infra.ReadFile(strings.TrimPrefix(v.Value, envVarFileLoader))
+			if err != nil {
+				return nil, nil, goerr.Wrap(err, "failed to open for file loader").With("target", v)
+			}
+			v.Value = string(body)
+		}
 	}
 
 	return args[last:], envVars, nil

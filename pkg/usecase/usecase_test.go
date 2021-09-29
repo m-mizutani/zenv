@@ -1,6 +1,7 @@
 package usecase_test
 
 import (
+	"os"
 	"testing"
 
 	"github.com/m-mizutani/zenv/pkg/domain/model"
@@ -94,5 +95,54 @@ func TestGenerate(t *testing.T) {
 			Key:    "blue",
 			Length: 24,
 		}), model.ErrKeychainInvalidNamespace)
+	})
+}
+
+func TestFileLoader(t *testing.T) {
+	t.Run("replace value with a file", func(t *testing.T) {
+		var calledExec int
+		uc, mock := usecase.NewWithMock()
+		mock.ReadFileMock = func(filename string) ([]byte, error) {
+			assert.Equal(t, "myfile.txt", filename)
+			return []byte("yummy"), nil
+		}
+		mock.ExecMock = func(vars []*model.EnvVar, args []string) error {
+			calledExec++
+			require.Len(t, vars, 1)
+			require.Len(t, args, 1)
+			assert.Equal(t, &model.EnvVar{
+				Key:    "FILE_VAL",
+				Value:  "yummy",
+				Secret: false,
+			}, vars[0])
+			assert.Equal(t, "gogo", args[0])
+			return nil
+		}
+		require.NoError(t, uc.Exec(&model.ExecInput{
+			Args: []string{
+				"FILE_VAL=@myfile.txt",
+				"gogo",
+			},
+		}))
+		assert.Equal(t, 1, calledExec)
+	})
+
+	t.Run("fail if not existing file specified", func(t *testing.T) {
+		var calledExec int
+		uc, mock := usecase.NewWithMock()
+		mock.ReadFileMock = func(filename string) ([]byte, error) {
+			return nil, os.ErrNotExist
+		}
+		mock.ExecMock = func(vars []*model.EnvVar, args []string) error {
+			calledExec++
+			return nil
+		}
+		require.ErrorIs(t, uc.Exec(&model.ExecInput{
+			Args: []string{
+				"FILE_VAL=@myfile.txt",
+				"gogo",
+			},
+		}), os.ErrNotExist)
+		assert.Equal(t, 0, calledExec)
 	})
 }
