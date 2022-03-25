@@ -9,4 +9,5 @@ type Interface interface {
 	Stdout(format string, v ...interface{})
 	PutKeyChainValues(envVars []*model.EnvVar, namespace string) error
 	GetKeyChainValues(namespace string) ([]*model.EnvVar, error)
+	ListKeyChainValues(prefix string) ([]string, error)
 }

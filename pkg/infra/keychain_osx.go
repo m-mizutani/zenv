@@ -1,8 +1,11 @@
+//go:build darwin
 // +build darwin
 
 package infra
 
 import (
+	"strings"
+
 	"github.com/keybase/go-keychain"
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
@@ -75,4 +78,28 @@ func (x *Infrastructure) GetKeyChainValues(namespace string) ([]*model.EnvVar, e
 	}
 
 	return envVars, nil
+}
+
+func (x *Infrastructure) ListKeyChainValues(namespace string) ([]string, error) {
+	query := keychain.NewItem()
+	query.SetSecClass(keychain.SecClassGenericPassword)
+	query.SetMatchLimit(keychain.MatchLimitAll)
+	query.SetReturnAttributes(true)
+
+	results, err := keychain.QueryItem(query)
+	if err != nil {
+		return nil, goerr.Wrap(err, "Fail to get keychain values")
+	}
+	if len(results) == 0 {
+		return nil, goerr.Wrap(model.ErrKeychainNotFound).With("namespace", namespace)
+	}
+
+	var resp []string
+	for _, result := range results {
+		if strings.HasPrefix(result.Service, namespace) {
+			resp = append(resp, result.Service)
+		}
+	}
+
+	return resp, nil
 }

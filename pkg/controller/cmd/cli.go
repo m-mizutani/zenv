@@ -1,4 +1,4 @@
-package controller
+package cmd
 
 import (
 	"errors"
@@ -12,17 +12,30 @@ import (
 	cli "github.com/urfave/cli/v2"
 )
 
-type Controller struct {
-	usecase usecase.Interface
+type Command struct {
+	usecase *usecase.Usecase
 }
 
-func New() *Controller {
-	return &Controller{
+func New(options ...Option) *Command {
+	cmd := &Command{
 		usecase: usecase.New(),
+	}
+
+	for _, opt := range options {
+		opt(cmd)
+	}
+	return cmd
+}
+
+type Option func(ctrl *Command)
+
+func WithUsecase(usecase *usecase.Usecase) Option {
+	return func(ctrl *Command) {
+		ctrl.usecase = usecase
 	}
 }
 
-func (x *Controller) CLI(args []string) {
+func (x *Command) Run(args []string) {
 	var appCfg model.Config
 
 	app := &cli.App{
@@ -51,7 +64,7 @@ func (x *Controller) CLI(args []string) {
 			x.cmdList(),
 		},
 		Before: func(c *cli.Context) error {
-			x.usecase.SetConfig(&appCfg)
+			x.usecase = x.usecase.Clone(usecase.WithConfig(&appCfg))
 			return nil
 		},
 		Action: func(c *cli.Context) error {
@@ -74,7 +87,7 @@ func (x *Controller) CLI(args []string) {
 	}
 }
 
-func (x *Controller) cmdList() *cli.Command {
+func (x *Command) cmdList() *cli.Command {
 	return &cli.Command{
 		Name: "list",
 		Action: func(c *cli.Context) error {
@@ -85,7 +98,7 @@ func (x *Controller) cmdList() *cli.Command {
 	}
 }
 
-func (x *Controller) cmdSecret() *cli.Command {
+func (x *Command) cmdSecret() *cli.Command {
 	var genInput model.GenerateSecretInput
 	var writeInput model.WriteSecretInput
 

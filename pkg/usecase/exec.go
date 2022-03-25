@@ -28,7 +28,7 @@ func replaceArguments(envVars []*model.EnvVar, args []string) []string {
 	return replaced
 }
 
-func (x *usecase) Exec(input *model.ExecInput) error {
+func (x *Usecase) Exec(input *model.ExecInput) error {
 	args, vars, err := x.parseArgs(input.Args)
 	if err != nil {
 		return err
@@ -49,7 +49,7 @@ func (x *usecase) Exec(input *model.ExecInput) error {
 	return nil
 }
 
-func (x *usecase) List(input *model.ListInput) error {
+func (x *Usecase) List(input *model.ListInput) error {
 	_, vars, err := x.parseArgs(input.Args)
 	if err != nil {
 		return err

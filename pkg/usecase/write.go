@@ -9,7 +9,7 @@ import (
 	"github.com/m-mizutani/zenv/pkg/utils"
 )
 
-func (x *usecase) Write(input *model.WriteSecretInput) error {
+func (x *Usecase) Write(input *model.WriteSecretInput) error {
 	if err := model.ValidateKeychainNamespace(input.Namespace); err != nil {
 		return goerr.Wrap(err).With("namespace", input.Namespace)
 	}
@@ -36,7 +36,7 @@ func (x *usecase) Write(input *model.WriteSecretInput) error {
 	return nil
 }
 
-func (x *usecase) Generate(input *model.GenerateSecretInput) error {
+func (x *Usecase) Generate(input *model.GenerateSecretInput) error {
 	if err := model.ValidateKeychainNamespace(input.Namespace); err != nil {
 		return goerr.Wrap(err).With("namespace", input.Namespace)
 	}

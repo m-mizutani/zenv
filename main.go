@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
-	"github.com/m-mizutani/zenv/pkg/controller"
+	"github.com/m-mizutani/zenv/pkg/controller/cmd"
 )
 
 func main() {
-	controller.New().CLI(os.Args)
+	cmd.New().Run(os.Args)
 }

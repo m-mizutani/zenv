@@ -66,7 +66,9 @@ func TestBasicExec(t *testing.T) {
 
 func TestDotEnv(t *testing.T) {
 	t.Run("exec with dotenv file", func(t *testing.T) {
-		uc, mock := usecase.NewWithMock()
+		uc, mock := usecase.NewWithMock(usecase.WithConfig(&model.Config{
+			DotEnvFile: ".mydotenv",
+		}))
 		mock.ExecMock = func(vars []*model.EnvVar, args []string) error {
 			require.Len(t, args, 2)
 			assert.Equal(t, "this", args[0])
@@ -88,16 +90,17 @@ COLOR=blue
 NUMBER=five
 `), nil
 		}
-		uc.SetConfig(&model.Config{
-			DotEnvFile: ".mydotenv",
-		})
+
 		require.NoError(t, uc.Exec(&model.ExecInput{
 			Args: []string{"this", "test"},
 		}))
 	})
 
 	t.Run("error when invalid line in dotenv file", func(t *testing.T) {
-		uc, mock := usecase.NewWithMock()
+		uc, mock := usecase.NewWithMock(usecase.WithConfig(
+			&model.Config{DotEnvFile: ".env"},
+		))
+
 		mock.ReadFileMock = func(filename string) ([]byte, error) {
 			assert.Equal(t, ".env", filename)
 			return []byte(`COLOR=blue
@@ -105,7 +108,7 @@ NoEqualMark
 NUMBER=five
 `), nil
 		}
-		uc.SetConfig(&model.Config{DotEnvFile: ".env"})
+
 		require.ErrorIs(t, uc.Exec(&model.ExecInput{
 			Args: []string{"this", "test"},
 		}), model.ErrInvalidArgumentFormat)
@@ -113,11 +116,12 @@ NUMBER=five
 
 	t.Run("something bad in reading dotenv", func(t *testing.T) {
 		err := fmt.Errorf("something bad")
-		uc, mock := usecase.NewWithMock()
+		uc, mock := usecase.NewWithMock(usecase.WithConfig(
+			&model.Config{DotEnvFile: ".env"},
+		))
 		mock.ReadFileMock = func(filename string) ([]byte, error) {
 			return nil, err
 		}
-		uc.SetConfig(&model.Config{DotEnvFile: ".env"})
 
 		require.ErrorIs(t, uc.Exec(&model.ExecInput{
 			Args: []string{"this", "test"},

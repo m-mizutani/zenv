@@ -11,8 +11,9 @@ type Mock struct {
 	PromptMock   func(msg string) string
 	StdoutMock   func(format string, v ...interface{})
 
-	PutKeyChainValuesMock func(envVars []*model.EnvVar, namespace string) error
-	GetKeyChainValuesMock func(namespace string) ([]*model.EnvVar, error)
+	PutKeyChainValuesMock  func(envVars []*model.EnvVar, namespace string) error
+	GetKeyChainValuesMock  func(namespace string) ([]*model.EnvVar, error)
+	ListKeyChainValuesMock func(prefix string) ([]string, error)
 
 	keychainDB map[string]map[string]*model.EnvVar
 }
@@ -24,6 +25,7 @@ func NewMock() *Mock {
 	mock.ReadFileMock = mock.readFile
 	mock.PutKeyChainValuesMock = mock.putKeyChainValues
 	mock.GetKeyChainValuesMock = mock.getKeyChainValues
+	mock.ListKeyChainValuesMock = mock.listKeyChainValues
 	return mock
 }
 
@@ -80,4 +82,17 @@ func (x *Mock) getKeyChainValues(namespace string) ([]*model.EnvVar, error) {
 		vars = append(vars, v)
 	}
 	return vars, nil
+}
+
+func (x *Mock) ListKeyChainValues(prefix string) ([]string, error) {
+	return x.ListKeyChainValuesMock(prefix)
+}
+
+func (x *Mock) listKeyChainValues(prefix string) ([]string, error) {
+	var keys []string
+	for k := range x.keychainDB {
+		keys = append(keys, k)
+	}
+
+	return keys, nil
 }
