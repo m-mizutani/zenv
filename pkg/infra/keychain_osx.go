@@ -82,6 +82,8 @@ func (x *client) GetKeyChainValues(ns types.Namespace) ([]*model.EnvVar, error) 
 }
 
 func (x *client) ListKeyChainNamespaces(prefix types.NamespacePrefix) ([]types.Namespace, error) {
+	namespaces := map[types.Namespace]struct{}{}
+
 	query := keychain.NewItem()
 	query.SetSecClass(keychain.SecClassGenericPassword)
 	query.SetMatchLimit(keychain.MatchLimitAll)
@@ -95,12 +97,15 @@ func (x *client) ListKeyChainNamespaces(prefix types.NamespacePrefix) ([]types.N
 		return nil, goerr.Wrap(types.ErrKeychainNotFound).With("prefix", prefix)
 	}
 
-	var resp []types.Namespace
 	for _, result := range results {
 		if strings.HasPrefix(result.Service, prefix.String()) {
-			resp = append(resp, types.Namespace(result.Service))
+			namespaces[types.Namespace(result.Service)] = struct{}{}
 		}
 	}
 
+	var resp []types.Namespace
+	for ns := range namespaces {
+		resp = append(resp, ns)
+	}
 	return resp, nil
 }

@@ -55,6 +55,10 @@ func (x NamespaceSuffix) ToNamespace(prefix NamespacePrefix) Namespace {
 	return Namespace(string(prefix) + strings.TrimPrefix(string(x), keychainNamespaceHead))
 }
 
+func (x Namespace) ToSuffix(prefix Namespace) NamespaceSuffix {
+	return NamespaceSuffix(keychainNamespaceHead + strings.TrimPrefix(string(x), string(prefix)))
+}
+
 const (
 	envVarSeparator       = "="
 	envVarFileLoader      = "&"

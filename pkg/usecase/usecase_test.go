@@ -27,7 +27,7 @@ func TestWrite(t *testing.T) {
 		}
 
 		mock.PromptMock = func(msg string) string { return "blue" }
-		require.NoError(t, uc.Write(&model.WriteSecretInput{
+		require.NoError(t, uc.WriteSecret(&model.WriteSecretInput{
 			Namespace: "@tower",
 			Key:       "COLOR",
 		}))
@@ -57,7 +57,7 @@ func TestGenerate(t *testing.T) {
 			assert.Len(t, envVars[0].Value, 24)
 			return nil
 		}
-		require.NoError(t, uc.Generate(&model.GenerateSecretInput{
+		require.NoError(t, uc.GenerateSecret(&model.GenerateSecretInput{
 			Namespace: "@bridge",
 			Key:       "SECRET",
 			Length:    24,
@@ -66,7 +66,7 @@ func TestGenerate(t *testing.T) {
 
 	t.Run("fail if length <= 0", func(t *testing.T) {
 		uc, _ := usecase.NewWithMock()
-		require.ErrorIs(t, uc.Generate(&model.GenerateSecretInput{
+		require.ErrorIs(t, uc.GenerateSecret(&model.GenerateSecretInput{
 			Namespace: "@bridge",
 			Key:       "SECRET",
 			Length:    0,
@@ -75,7 +75,7 @@ func TestGenerate(t *testing.T) {
 
 	t.Run("fail if length > 2^16", func(t *testing.T) {
 		uc, _ := usecase.NewWithMock()
-		require.ErrorIs(t, uc.Generate(&model.GenerateSecretInput{
+		require.ErrorIs(t, uc.GenerateSecret(&model.GenerateSecretInput{
 			Namespace: "@bridge",
 			Key:       "SECRET",
 			Length:    65536,
@@ -84,7 +84,7 @@ func TestGenerate(t *testing.T) {
 
 	t.Run("fail if key is empty", func(t *testing.T) {
 		uc, _ := usecase.NewWithMock()
-		require.ErrorIs(t, uc.Generate(&model.GenerateSecretInput{
+		require.ErrorIs(t, uc.GenerateSecret(&model.GenerateSecretInput{
 			Namespace: "@bridge",
 			Length:    24,
 		}), types.ErrInvalidArgument)
@@ -92,7 +92,7 @@ func TestGenerate(t *testing.T) {
 
 	t.Run("fail if namespaec is empty", func(t *testing.T) {
 		uc, _ := usecase.NewWithMock()
-		require.ErrorIs(t, uc.Generate(&model.GenerateSecretInput{
+		require.ErrorIs(t, uc.GenerateSecret(&model.GenerateSecretInput{
 			Key:    "blue",
 			Length: 24,
 		}), types.ErrInvalidArgument)

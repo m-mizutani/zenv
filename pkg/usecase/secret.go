@@ -10,7 +10,7 @@ import (
 	"github.com/m-mizutani/zenv/pkg/utils"
 )
 
-func (x *Usecase) Write(input *model.WriteSecretInput) error {
+func (x *Usecase) WriteSecret(input *model.WriteSecretInput) error {
 	if err := input.Namespace.Validate(); err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func (x *Usecase) Write(input *model.WriteSecretInput) error {
 	return nil
 }
 
-func (x *Usecase) Generate(input *model.GenerateSecretInput) error {
+func (x *Usecase) GenerateSecret(input *model.GenerateSecretInput) error {
 	if err := input.Namespace.Validate(); err != nil {
 		return err
 	}
@@ -73,4 +73,18 @@ func genRandomSecret(n uint) (string, error) {
 		return "", types.ErrGenerateRandom.Wrap(err)
 	}
 	return base64.URLEncoding.EncodeToString(b)[:n], nil
+}
+
+func (x *Usecase) ListNamespaces() error {
+	namespaces, err := x.client.ListKeyChainNamespaces(x.config.KeychainNamespacePrefix)
+	if err != nil {
+		return err
+	}
+
+	for i := range namespaces {
+		ns := namespaces[i].ToSuffix(types.Namespace(x.config.KeychainNamespacePrefix))
+		x.client.Stdout("%s\n", ns)
+	}
+
+	return nil
 }

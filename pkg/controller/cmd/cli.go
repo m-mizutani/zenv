@@ -123,7 +123,7 @@ func (x *Command) cmdSecret() *cli.Command {
 					}
 					writeInput.Namespace = types.NamespaceSuffix(c.Args().Get(0))
 					writeInput.Key = types.EnvKey(c.Args().Get(1))
-					return x.usecase.Write(&writeInput)
+					return x.usecase.WriteSecret(&writeInput)
 				},
 			},
 			{
@@ -144,7 +144,14 @@ func (x *Command) cmdSecret() *cli.Command {
 					}
 					genInput.Namespace = types.NamespaceSuffix(c.Args().Get(0))
 					genInput.Key = types.EnvKey(c.Args().Get(1))
-					return x.usecase.Generate(&genInput)
+					return x.usecase.GenerateSecret(&genInput)
+				},
+			},
+			{
+				Name:    "list",
+				Aliases: []string{"l", "ls"},
+				Action: func(c *cli.Context) error {
+					return x.usecase.ListNamespaces()
 				},
 			},
 		},
