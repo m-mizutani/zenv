@@ -6,6 +6,7 @@ package infra
 import (
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
+	"github.com/m-mizutani/zenv/pkg/domain/types"
 )
 
 func (x *client) PutKeyChainValues(envVars []*model.EnvVar, ns types.Namespace) error {
