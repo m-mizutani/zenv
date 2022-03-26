@@ -22,3 +22,8 @@ type GenerateSecretInput struct {
 	Key       types.EnvKey
 	Length    int64
 }
+
+type DeleteSecretInput struct {
+	Namespace types.NamespaceSuffix
+	Key       types.EnvKey
+}

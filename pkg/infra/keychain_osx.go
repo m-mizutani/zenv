@@ -52,6 +52,9 @@ func (x *client) GetKeyChainValues(ns types.Namespace) ([]*model.EnvVar, error) 
 
 	results, err := keychain.QueryItem(query)
 	if err != nil {
+		if err == keychain.ErrorItemNotFound {
+			return nil, types.ErrKeychainNotFound.Wrap(err)
+		}
 		return nil, goerr.Wrap(err, "Fail to get keychain values")
 	}
 	if len(results) == 0 {
@@ -108,4 +111,19 @@ func (x *client) ListKeyChainNamespaces(prefix types.NamespacePrefix) ([]types.N
 		resp = append(resp, ns)
 	}
 	return resp, nil
+}
+
+func (x *client) DeleteKeyChainValue(ns types.Namespace, key types.EnvKey) error {
+	q := keychain.NewItem()
+	q.SetSecClass(keychain.SecClassGenericPassword)
+	q.SetService(ns.String())
+	q.SetAccount(key.String())
+	if err := keychain.DeleteItem(q); err != nil {
+		if err == keychain.ErrorItemNotFound {
+			return types.ErrKeychainNotFound.Wrap(err)
+		}
+		return err
+	}
+
+	return nil
 }

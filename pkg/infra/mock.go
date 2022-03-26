@@ -16,6 +16,7 @@ type Mock struct {
 	GetKeyChainValuesMock      func(types.Namespace) ([]*model.EnvVar, error)
 	DeleteKeyChainValuesMock   func(types.Namespace, types.EnvKey) error
 	ListKeyChainNamespacesMock func(types.NamespacePrefix) ([]types.Namespace, error)
+	DeleteKeyChainValueMock    func(types.Namespace, types.EnvKey) error
 
 	keychainDB map[types.Namespace]map[types.EnvKey]*model.EnvVar
 }

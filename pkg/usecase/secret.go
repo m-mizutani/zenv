@@ -88,3 +88,14 @@ func (x *Usecase) ListNamespaces() error {
 
 	return nil
 }
+
+func (x *Usecase) DeleteSecret(input *model.DeleteSecretInput) error {
+	ns := input.Namespace.ToNamespace(x.config.KeychainNamespacePrefix)
+	if err := x.client.DeleteKeyChainValue(ns, input.Key); err != nil {
+		return err
+	}
+
+	x.client.Stdout("%s %s is deleted\n", input.Key, input.Namespace)
+
+	return nil
+}

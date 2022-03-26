@@ -13,6 +13,7 @@ type Client interface {
 	PutKeyChainValues(envVars []*model.EnvVar, ns types.Namespace) error
 	GetKeyChainValues(ns types.Namespace) ([]*model.EnvVar, error)
 	ListKeyChainNamespaces(prefix types.NamespacePrefix) ([]types.Namespace, error)
+	DeleteKeyChainValue(types.Namespace, types.EnvKey) error
 }
 
 type client struct{}

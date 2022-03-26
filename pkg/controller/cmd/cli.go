@@ -154,6 +154,20 @@ func (x *Command) cmdSecret() *cli.Command {
 					return x.usecase.ListNamespaces()
 				},
 			},
+			{
+				Name:    "delete",
+				Aliases: []string{"d", "del"},
+				Action: func(c *cli.Context) error {
+					if c.NArg() != 2 {
+						return goerr.Wrap(types.ErrInvalidArgumentFormat, "delete [namespace] [key]")
+					}
+					delInput := &model.DeleteSecretInput{
+						Namespace: types.NamespaceSuffix(c.Args().Get(0)),
+						Key:       types.EnvKey(c.Args().Get(1)),
+					}
+					return x.usecase.DeleteSecret(delInput)
+				},
+			},
 		},
 	}
 }
