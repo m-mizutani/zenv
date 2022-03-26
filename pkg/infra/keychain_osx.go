@@ -9,14 +9,15 @@ import (
 	"github.com/keybase/go-keychain"
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
+	"github.com/m-mizutani/zenv/pkg/domain/types"
 )
 
-func (x *Infrastructure) PutKeyChainValues(envVars []*model.EnvVar, namespace string) error {
+func (x *client) PutKeyChainValues(envVars []*model.EnvVar, ns types.Namespace) error {
 	for _, v := range envVars {
 		item := keychain.NewItem()
 		item.SetSecClass(keychain.SecClassGenericPassword)
-		item.SetService(namespace)
-		item.SetAccount(v.Key)
+		item.SetService(ns.String())
+		item.SetAccount(v.Key.String())
 		item.SetDescription("zenv")
 		item.SetData([]byte(v.Value))
 		item.SetAccessible(keychain.AccessibleWhenUnlocked)
@@ -27,8 +28,8 @@ func (x *Infrastructure) PutKeyChainValues(envVars []*model.EnvVar, namespace st
 			// Duplicate
 			query := keychain.NewItem()
 			query.SetSecClass(keychain.SecClassGenericPassword)
-			query.SetService(namespace)
-			query.SetAccount(v.Key)
+			query.SetService(ns.String())
+			query.SetAccount(v.Key.String())
 			query.SetMatchLimit(keychain.MatchLimitAll)
 
 			if err := keychain.UpdateItem(query, item); err != nil {
@@ -42,10 +43,10 @@ func (x *Infrastructure) PutKeyChainValues(envVars []*model.EnvVar, namespace st
 	return nil
 }
 
-func (x *Infrastructure) GetKeyChainValues(namespace string) ([]*model.EnvVar, error) {
+func (x *client) GetKeyChainValues(ns types.Namespace) ([]*model.EnvVar, error) {
 	query := keychain.NewItem()
 	query.SetSecClass(keychain.SecClassGenericPassword)
-	query.SetService(namespace)
+	query.SetService(ns.String())
 	query.SetMatchLimit(keychain.MatchLimitAll)
 	query.SetReturnAttributes(true)
 
@@ -54,25 +55,25 @@ func (x *Infrastructure) GetKeyChainValues(namespace string) ([]*model.EnvVar, e
 		return nil, goerr.Wrap(err, "Fail to get keychain values")
 	}
 	if len(results) == 0 {
-		return nil, goerr.Wrap(model.ErrKeychainNotFound).With("namespace", namespace)
+		return nil, goerr.Wrap(types.ErrKeychainNotFound).With("namespace", ns)
 	}
 
 	var envVars []*model.EnvVar
 	for _, result := range results {
 		q := keychain.NewItem()
 		q.SetSecClass(keychain.SecClassGenericPassword)
-		q.SetService(namespace)
+		q.SetService(ns.String())
 		q.SetMatchLimit(keychain.MatchLimitOne)
 		q.SetAccount(result.Account)
 		q.SetReturnData(true)
 
 		data, err := keychain.QueryItem(q)
 		if err != nil {
-			return nil, goerr.Wrap(model.ErrKeychainQueryFailed).With("account", result.Account)
+			return nil, goerr.Wrap(types.ErrKeychainQueryFailed).With("account", result.Account)
 		}
 		envVars = append(envVars, &model.EnvVar{
-			Key:    result.Account,
-			Value:  string(data[0].Data),
+			Key:    types.EnvKey(result.Account),
+			Value:  types.EnvValue(data[0].Data),
 			Secret: true,
 		})
 	}
@@ -80,7 +81,7 @@ func (x *Infrastructure) GetKeyChainValues(namespace string) ([]*model.EnvVar, e
 	return envVars, nil
 }
 
-func (x *Infrastructure) ListKeyChainValues(namespace string) ([]string, error) {
+func (x *client) ListKeyChainNamespaces(prefix types.NamespacePrefix) ([]types.Namespace, error) {
 	query := keychain.NewItem()
 	query.SetSecClass(keychain.SecClassGenericPassword)
 	query.SetMatchLimit(keychain.MatchLimitAll)
@@ -91,13 +92,13 @@ func (x *Infrastructure) ListKeyChainValues(namespace string) ([]string, error) 
 		return nil, goerr.Wrap(err, "Fail to get keychain values")
 	}
 	if len(results) == 0 {
-		return nil, goerr.Wrap(model.ErrKeychainNotFound).With("namespace", namespace)
+		return nil, goerr.Wrap(types.ErrKeychainNotFound).With("prefix", prefix)
 	}
 
-	var resp []string
+	var resp []types.Namespace
 	for _, result := range results {
-		if strings.HasPrefix(result.Service, namespace) {
-			resp = append(resp, result.Service)
+		if strings.HasPrefix(result.Service, prefix.String()) {
+			resp = append(resp, types.Namespace(result.Service))
 		}
 	}
 

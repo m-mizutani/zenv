@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package infra
@@ -7,10 +8,10 @@ import (
 	"github.com/m-mizutani/zenv/pkg/domain/model"
 )
 
-func (x *Infrastructure) PutKeyChainValues(envVars []*model.EnvVar, namespace string) error {
-	return goerr.Wrap(model.ErrKeychainNotSupported)
+func (x *client) PutKeyChainValues(envVars []*model.EnvVar, namespace string) error {
+	return goerr.Wrap(types.ErrKeychainNotSupported)
 }
 
-func (x *Infrastructure) GetKeyChainValues(namespace string) ([]*model.EnvVar, error) {
-	return nil, goerr.Wrap(model.ErrKeychainNotSupported)
+func (x *client) GetKeyChainValues(namespace string) ([]*model.EnvVar, error) {
+	return nil, goerr.Wrap(types.ErrKeychainNotSupported)
 }

@@ -3,41 +3,44 @@ package infra
 import (
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
+	"github.com/m-mizutani/zenv/pkg/domain/types"
 )
 
 type Mock struct {
-	ExecMock     func(vars []*model.EnvVar, args []string) error
-	ReadFileMock func(filename string) ([]byte, error)
+	ExecMock     func(vars []*model.EnvVar, args types.Arguments) error
+	ReadFileMock func(filename types.FilePath) ([]byte, error)
 	PromptMock   func(msg string) string
 	StdoutMock   func(format string, v ...interface{})
 
-	PutKeyChainValuesMock  func(envVars []*model.EnvVar, namespace string) error
-	GetKeyChainValuesMock  func(namespace string) ([]*model.EnvVar, error)
-	ListKeyChainValuesMock func(prefix string) ([]string, error)
+	PutKeyChainValuesMock      func([]*model.EnvVar, types.Namespace) error
+	GetKeyChainValuesMock      func(types.Namespace) ([]*model.EnvVar, error)
+	DeleteKeyChainValuesMock   func(types.Namespace, types.EnvKey) error
+	ListKeyChainNamespacesMock func(types.NamespacePrefix) ([]types.Namespace, error)
 
-	keychainDB map[string]map[string]*model.EnvVar
+	keychainDB map[types.Namespace]map[types.EnvKey]*model.EnvVar
 }
 
 func NewMock() *Mock {
 	mock := &Mock{
-		keychainDB: make(map[string]map[string]*model.EnvVar),
+		keychainDB: make(map[types.Namespace]map[types.EnvKey]*model.EnvVar),
 	}
 	mock.ReadFileMock = mock.readFile
 	mock.PutKeyChainValuesMock = mock.putKeyChainValues
 	mock.GetKeyChainValuesMock = mock.getKeyChainValues
-	mock.ListKeyChainValuesMock = mock.listKeyChainValues
+	mock.DeleteKeyChainValuesMock = mock.deleteKeyChainValue
+	mock.ListKeyChainNamespacesMock = mock.listKeyChainNamespaces
 	return mock
 }
 
-func (x *Mock) Exec(vars []*model.EnvVar, args []string) error {
+func (x *Mock) Exec(vars []*model.EnvVar, args types.Arguments) error {
 	return x.ExecMock(vars, args)
 }
 
-func (x *Mock) ReadFile(filename string) ([]byte, error) {
+func (x *Mock) ReadFile(filename types.FilePath) ([]byte, error) {
 	return x.ReadFileMock(filename)
 }
 
-func (x *Mock) readFile(filename string) ([]byte, error) {
+func (x *Mock) readFile(filename types.FilePath) ([]byte, error) {
 	return nil, nil
 }
 
@@ -49,15 +52,27 @@ func (x *Mock) Prompt(msg string) string {
 	return x.PromptMock(msg)
 }
 
-func (x *Mock) PutKeyChainValues(envVars []*model.EnvVar, namespace string) error {
+func (x *Mock) PutKeyChainValues(envVars []*model.EnvVar, namespace types.Namespace) error {
 
 	return x.PutKeyChainValuesMock(envVars, namespace)
 }
 
-func (x *Mock) putKeyChainValues(envVars []*model.EnvVar, namespace string) error {
+func (x *Mock) GetKeyChainValues(namespace types.Namespace) ([]*model.EnvVar, error) {
+	return x.GetKeyChainValuesMock(namespace)
+}
+
+func (x *Mock) ListKeyChainNamespaces(prefix types.NamespacePrefix) ([]types.Namespace, error) {
+	return x.ListKeyChainNamespacesMock(prefix)
+}
+
+func (x *Mock) DeleteKeyChainValue(ns types.Namespace, key types.EnvKey) error {
+	return x.DeleteKeyChainValuesMock(ns, key)
+}
+
+func (x *Mock) putKeyChainValues(envVars []*model.EnvVar, namespace types.Namespace) error {
 	db, ok := x.keychainDB[namespace]
 	if !ok {
-		db = make(map[string]*model.EnvVar)
+		db = make(map[types.EnvKey]*model.EnvVar)
 		x.keychainDB[namespace] = db
 	}
 
@@ -67,14 +82,10 @@ func (x *Mock) putKeyChainValues(envVars []*model.EnvVar, namespace string) erro
 	return nil
 }
 
-func (x *Mock) GetKeyChainValues(namespace string) ([]*model.EnvVar, error) {
-	return x.GetKeyChainValuesMock(namespace)
-}
-
-func (x *Mock) getKeyChainValues(namespace string) ([]*model.EnvVar, error) {
-	db, ok := x.keychainDB[namespace]
+func (x *Mock) getKeyChainValues(ns types.Namespace) ([]*model.EnvVar, error) {
+	db, ok := x.keychainDB[ns]
 	if !ok {
-		return nil, goerr.Wrap(model.ErrKeychainNotFound).With("namespace", namespace)
+		return nil, goerr.Wrap(types.ErrKeychainNotFound).With("namespace", ns)
 	}
 
 	var vars []*model.EnvVar
@@ -84,15 +95,23 @@ func (x *Mock) getKeyChainValues(namespace string) ([]*model.EnvVar, error) {
 	return vars, nil
 }
 
-func (x *Mock) ListKeyChainValues(prefix string) ([]string, error) {
-	return x.ListKeyChainValuesMock(prefix)
-}
-
-func (x *Mock) listKeyChainValues(prefix string) ([]string, error) {
-	var keys []string
+func (x *Mock) listKeyChainNamespaces(prefix types.NamespacePrefix) ([]types.Namespace, error) {
+	var keys []types.Namespace
 	for k := range x.keychainDB {
-		keys = append(keys, k)
+		if k.HasPrefix(prefix) {
+			keys = append(keys, k)
+		}
 	}
 
 	return keys, nil
+}
+
+func (x *Mock) deleteKeyChainValue(namespace types.Namespace, key types.EnvKey) error {
+	db, ok := x.keychainDB[namespace]
+	if !ok {
+		return goerr.Wrap(types.ErrKeychainNotFound).With("namespace", namespace)
+	}
+
+	delete(db, key)
+	return nil
 }

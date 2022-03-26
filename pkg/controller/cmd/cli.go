@@ -6,6 +6,7 @@ import (
 
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
+	"github.com/m-mizutani/zenv/pkg/domain/types"
 	"github.com/m-mizutani/zenv/pkg/usecase"
 	"github.com/m-mizutani/zenv/pkg/utils"
 
@@ -47,7 +48,7 @@ func (x *Command) Run(args []string) {
 				Name:        "keychian-prefix",
 				Usage:       "Keychain name prefix",
 				Aliases:     []string{"k"},
-				Destination: &appCfg.KeychainNamespacePrefix,
+				Destination: (*string)(&appCfg.KeychainNamespacePrefix),
 				Value:       "zenv.",
 			},
 
@@ -55,8 +56,8 @@ func (x *Command) Run(args []string) {
 				Name:        "env-file",
 				Usage:       "specify dotenv file",
 				Aliases:     []string{"e"},
-				Destination: &appCfg.DotEnvFile,
-				Value:       model.DefaultDotEnvFilePath,
+				Destination: (*string)(&appCfg.DotEnvFile),
+				Value:       (string)(model.DefaultDotEnvFilePath),
 			},
 		},
 		Commands: []*cli.Command{
@@ -69,7 +70,11 @@ func (x *Command) Run(args []string) {
 		},
 		Action: func(c *cli.Context) error {
 			var input model.ExecInput
-			input.Args = c.Args().Slice()
+			args := make(types.Arguments, c.NArg())
+			for i := range args {
+				args[i] = types.Argument(c.Args().Get(i))
+			}
+			input.Args = args
 			return x.usecase.Exec(&input)
 		},
 	}
@@ -91,8 +96,12 @@ func (x *Command) cmdList() *cli.Command {
 	return &cli.Command{
 		Name: "list",
 		Action: func(c *cli.Context) error {
+			args := make(types.Arguments, c.NArg())
+			for i := range args {
+				args[i] = types.Argument(c.Args().Get(i))
+			}
 			return x.usecase.List(&model.ListInput{
-				Args: c.Args().Slice(),
+				Args: args,
 			})
 		},
 	}
@@ -110,10 +119,10 @@ func (x *Command) cmdSecret() *cli.Command {
 				Aliases: []string{"w"},
 				Action: func(c *cli.Context) error {
 					if c.NArg() != 2 {
-						return goerr.Wrap(model.ErrInvalidArgumentFormat, "write [namespace] [key]")
+						return goerr.Wrap(types.ErrInvalidArgumentFormat, "write [namespace] [key]")
 					}
-					writeInput.Namespace = c.Args().Get(0)
-					writeInput.Key = c.Args().Get(1)
+					writeInput.Namespace = types.NamespaceSuffix(c.Args().Get(0))
+					writeInput.Key = types.EnvKey(c.Args().Get(1))
 					return x.usecase.Write(&writeInput)
 				},
 			},
@@ -131,10 +140,10 @@ func (x *Command) cmdSecret() *cli.Command {
 				},
 				Action: func(c *cli.Context) error {
 					if c.NArg() != 2 {
-						return goerr.Wrap(model.ErrInvalidArgumentFormat, "generate [namespace] [key]")
+						return goerr.Wrap(types.ErrInvalidArgumentFormat, "generate [namespace] [key]")
 					}
-					genInput.Namespace = c.Args().Get(0)
-					genInput.Key = c.Args().Get(1)
+					genInput.Namespace = types.NamespaceSuffix(c.Args().Get(0))
+					genInput.Key = types.EnvKey(c.Args().Get(1))
 					return x.usecase.Generate(&genInput)
 				},
 			},

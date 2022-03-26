@@ -8,14 +8,15 @@ import (
 
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
+	"github.com/m-mizutani/zenv/pkg/domain/types"
 )
 
-func (x *Infrastructure) Exec(vars []*model.EnvVar, args []string) error {
+func (x *client) Exec(vars []*model.EnvVar, args types.Arguments) error {
 	if len(args) == 0 {
-		return model.ErrNotEnoughArgument
+		return types.ErrNotEnoughArgument
 	}
 
-	binary, err := exec.LookPath(args[0])
+	binary, err := exec.LookPath(args[0].String())
 	if err != nil {
 		return err
 	}
@@ -26,7 +27,7 @@ func (x *Infrastructure) Exec(vars []*model.EnvVar, args []string) error {
 	}
 
 	/* #nosec */
-	if err := syscall.Exec(binary, args, envvars); err != nil {
+	if err := syscall.Exec(binary, args.Strings(), envvars); err != nil {
 		return goerr.Wrap(err).With("args", args)
 	}
 

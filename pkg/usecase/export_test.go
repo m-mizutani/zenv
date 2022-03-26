@@ -6,8 +6,8 @@ import (
 
 func NewWithMock(options ...Option) (*Usecase, *infra.Mock) {
 	mock := infra.NewMock()
-	uc := New(append(options, WithInfra(mock))...)
+	uc := New(append(options, WithClient(mock))...)
 	uc.config.KeychainNamespacePrefix = "zenv."
-	uc.infra = mock
+	uc.client = mock
 	return uc, mock
 }

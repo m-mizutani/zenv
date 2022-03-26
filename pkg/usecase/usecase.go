@@ -6,13 +6,13 @@ import (
 )
 
 type Usecase struct {
-	infra  infra.Interface
+	client infra.Client
 	config *model.Config
 }
 
 func New(options ...Option) *Usecase {
 	core := &Usecase{
-		infra:  infra.New(),
+		client: infra.New(),
 		config: &model.Config{},
 	}
 
@@ -30,16 +30,16 @@ func (x *Usecase) Clone(options ...Option) *Usecase {
 	return &core
 }
 
-type Option func(core *Usecase)
+type Option func(usecase *Usecase)
 
-func WithInfra(clients infra.Interface) Option {
-	return func(core *Usecase) {
-		core.infra = clients
+func WithClient(client infra.Client) Option {
+	return func(usecase *Usecase) {
+		usecase.client = client
 	}
 }
 
 func WithConfig(cfg *model.Config) Option {
-	return func(core *Usecase) {
-		core.config = cfg
+	return func(usecase *Usecase) {
+		usecase.config = cfg
 	}
 }
