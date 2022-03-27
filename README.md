@@ -1,4 +1,4 @@
-# zenv ![CI](https://github.com/m-mizutani/zenv/actions/workflows/test.yml/badge.svg) [![Go Report Card](https://goreportcard.com/badge/github.com/m-mizutani/zenv)](https://goreportcard.com/report/github.com/m-mizutani/zenv)
+# zenv [![CI](https://github.com/m-mizutani/zenv/actions/workflows/test.yml/badge.svg)](https://github.com/m-mizutani/zenv/actions/workflows/test.yml) [![Security Scan](https://github.com/m-mizutani/zenv/actions/workflows/gosec.yml/badge.svg)](https://github.com/m-mizutani/zenv/actions/workflows/gosec.yml) [![Vuln scan](https://github.com/m-mizutani/zenv/actions/workflows/trivy.yml/badge.svg)](https://github.com/m-mizutani/zenv/actions/workflows/trivy.yml) <!-- omit in toc -->
 
 `zenv` is enhanced `env` command to manage environment variables in CLI.
 
@@ -9,36 +9,88 @@
 - Securely save, generate and get secret values with Keychain, inspired by [envchain](https://github.com/sorah/envchain) (supported only macOS)
 - Replace command line argument with loaded environment variable
 
-## Install
+## Install <!-- omit in toc -->
 
 ```sh
 go install github.com/m-mizutani/zenv@latest
 ```
 
-## Usage
+## Basic Usage
 
-### Set environment variable with `env` command
+### Set by CLI argument
 
+Can set environment variable in same manner with `env` command
 
+```sh
+$ zenv POSTGRES_DB=your_local_dev_db psql
+```
 
-### Save and load secret value(s) to Keychain
+### Load from `.env` file
 
-Save values.
+Automatically load `.env` file and
+
+```sh
+$ cat .env
+POSTGRES_DB=your_local_db
+POSTGRES_USER=test_user
+PGDATA=/var/lib/db
+$ zenv psql -h localhost -p 15432
+# connecting to your_local_db on localhost:15432 as test_user
+```
+
+### Save and load secret values
+
+```sh
+# save a secret value
+$ zenv secret write @aws-account AWS_SECRET_ACCESS_KEY
+Value: # no echo
+$ zenv secret write @aws-account AWS_ACCESS_KEY_ID
+Value: # no echo
+
+# load a secret value and execute command "aws s3 ls"
+$ zenv @aws-account aws s3 ls
+2020-06-19 03:53:13 my-bucket1
+2020-04-18 06:45:44 my-bucket2
+...
+```
+
+`secret write` command format is `zenv secret write <Namespace> <Key>` to save a secret value. In above case, `@aws-account` is *Namespace* and `AWS_SECRET_ACCESS_KEY` & `AWS_ACCESS_KEY_ID` are *Key (Environment variable name)*. *Namespace* **must** have `@` prefix.
+
+`zenv <Namespace> <Command>` executes `<Command>` with loaded secret value(s) from `<Namespace>` as environment variables. If multiple environment variables are saved in the `<Namespace>`, all variables are loaded.
+
+### Mixing CLI, `.env` and secret
+
+All of CLI argument, loading `.env` and secret can be used in parallel. An example is following.
+
 ```sh
 $ zenv secret write @aws-account AWS_SECRET_ACCESS_KEY
-Value: ***
-$ zenv secret @aws-account AWS_ACCESS_KEY_ID
-Value: ***
+Value: # no echo
+$ cat .env
+AWS_ACCESS_KEY_ID=abcdefghijklmn
+$ zenv @aws-account AWS_REGION=jp-northeast-1 aws s3 ls
+# access to S3 with AWS_SECRET_ACCESS_KEY, AWS_SECRET_ACCESS_KEY and AWS_REGION
 ```
 
-Use values.
+Also, `-e` option specifies a file used as `.env`.
+
+### List loaded variables
+
+You can see loaded environment variable by zenv with `zenv list <...>` command.
+
 ```sh
-$ zenv @aws-account aws s3 ls
+$ zenv list @aws-account AWS_REGION=jp-northeast-1
+AWS_REGION=jp-northeast-1
+AWS_ACCESS_KEY_ID=abcdefghijklmn
+AWS_SECRET_ACCESS_KEY=******************************** (hidden)
 ```
+
+You can specify arguments to specify loading environment in same manner with executing command. Of curse secret values loaded from Keychain will be masked.
+
+## Advanced Usage
 
 ### Generate random secure value
 
-`generate` subcommand can generate random value like token and save to KeyChain.
+`secret generate` subcommand can generate random value like token and save to KeyChain.
 
 ```sh
 $ zenv secret generate @my-project MYSQL_PASS
@@ -48,38 +100,34 @@ MYSQL_PASS=******************************** (hidden)
 TMP_TOKEN=******** (hidden)
 ```
 
-### List loaded environment variables
+### List namespaces
 
-`list` subcommand output list of all loaded environment variables. Mask secret values with `*` if the variable is loaded from Keychain.
+`secret list` subcommand shows list of namespaces.
 
 ```sh
-$ zenv list @aws-account AWS_REGION=ap-northeast-1
-AWS_ACCESS_KEY_ID=******************** (hidden)
-AWS_SECRET_ACCESS_KEY=**************************************** (hidden)
-AWS_REGION=ap-northeast-1
+$ zenv secret list
+@aws
+@local-db
+@staging-db
 ```
 
-### Load from .env file
+### Put namespace into .env file
+
+You can also can put *Namespace* for secret values into `.env` file. Then, `zenv` always loads secret values without *Namespace* argument.
 
 ```sh
+$ zenv secret write @aws AWS_SECRET_ACCESS_KEY
+Value # <- input
+
 $ cat .env
-AWS_REGION=ap-northeast-1
+@aws
+AWS_REGION=jp-northeast-1
+AWS_ACCESS_KEY_ID=abcdefghijklmn
+
 $ zenv list
-AWS_REGION=ap-northeast-1
-```
-
-`.env` is default dotenv file name and zenv loads environment variables from the file if existing. Also, `-e` option specifies a file used as `.env`.
-
-### Mixing keychain profile to .env file
-
-```sh
-$ cat .env
-@aws-account
-AWS_REGION=ap-northeast-1
-$ zenv -l
-AWS_ACCESS_KEY_ID=******************** (hidden)
-AWS_SECRET_ACCESS_KEY=**************************************** (hidden)
-AWS_REGION=ap-northeast-1
+AWS_REGION=jp-northeast-1
+AWS_ACCESS_KEY_ID=abcdefghijklmn
+AWS_SECRET_ACCESS_KEY=******************************** (hidden)
 ```
 
 ### Replace value in arguments with loaded environment variable
@@ -98,3 +146,31 @@ $ zenv curl -v -H "Authorization: bearer %TOKEN" http://localhost:1234
 > Authorization: bearer abc123
 (snip)
 ```
+
+### Loading file content to environment variable
+
+Sometime, we need to load large content into environment variable. For example, Google OAuth2 credential file is slightly large to write in `.env` file and complicated. `zenv` can load file content into environment variable with `&` prefix.
+
+```sh
+$ cat .env
+GOOGLE_OAUTH_DATA=&tmp/client_secret_00000-abcdefg.apps.googleusercontent.com.json
+$ zenv list
+GOOGLE_OAUTH_DATA={"web":{"client_id":"00000...(snip)..."}}
+$ zenv ./some-oauth-server
+```
+
+### Execute command in `.env` file
+
+zenv recognizes environment value as command by surrounding with `` ` `` backquote (backtick). The feature is useful to set short live token that provided CLI command. `zenv` set standard output as value of environment variable.
+
+```sh
+$ cat .env
+GOOGLE_TOKEN=`gcloud auth print-identity-token`
+$ zenv list
+GOOGLE_TOKEN=eyJhbGciOiJS...(snip)
+$ zenv ./some-app-requires-token
+```
+
+## License
+
+Apache License 2.0
