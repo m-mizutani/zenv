@@ -197,7 +197,7 @@ func (x *Usecase) ExportSecret(input *model.ExportSecretInput) error {
 		return goerr.Wrap(err, "failed to output backup stream")
 	}
 
-	x.client.Stdout("export secrets to %s\n", dstName)
+	x.client.Stdout("exported secrets to %s\n", dstName)
 
 	return nil
 }
@@ -252,6 +252,6 @@ func (x *Usecase) ImportSecret(input *model.ImportSecretInput) error {
 		}
 	}
 
-	x.client.Stdout("export secrets from %s\n", srcName)
+	x.client.Stdout("imported secrets from %s\n", srcName)
 	return nil
 }

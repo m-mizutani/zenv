@@ -161,7 +161,7 @@ $ zenv ./some-oauth-server
 
 ### Execute command in `.env` file
 
-zenv recognizes environment value as command by surrounding with `` ` `` backquote (backtick). The feature is useful to set short live token that provided CLI command. `zenv` set standard output as value of environment variable.
+`zenv` recognizes environment value as command by surrounding with `` ` `` backquote (backtick). The feature is useful to set short live token that provided CLI command. `zenv` set standard output as value of environment variable.
 
 ```sh
 $ cat .env
@@ -170,6 +170,36 @@ $ zenv list
 GOOGLE_TOKEN=eyJhbGciOiJS...(snip)
 $ zenv ./some-app-requires-token
 ```
+
+### Backup and restore secrets
+
+For example, when migrating PC, we need to transfer every data including secrets. So backup and restore features are required. `zenv` provides export and import command as following.
+
+```sh
+$ zenv secret write @aws AWS_SECRET_ACCESS_KEY
+Value: # <- input secret
+$ zenv secret export -o backup.json
+input passphrase: # <- input passphrase
+exported secrets to backup.json
+$ cat backup.json
+{
+  "CreatedAt": "2022-03-27T13:37:06.577827+09:00",
+  "Encrypted": "wr/s6Z5T4diP6Ihu1318tL2tRA2Ch2LImAB1QEJi0...(snip)..."
+}
+```
+
+`secret export` command dumps encrypted all secrets to JSON file. You can filter dumped namespace by `-n` option.
+
+After that, move `backup.json` to new machine and import it.
+
+```sh
+$ zenv secret import backup.json
+input passphrase: # <- input passphrase
+$ zenv list @aws
+AWS_SECRET_ACCESS_KEY=******************************** (hidden)
+```
+
+Passphrase must be same when exporting and importing.
 
 ## License
 
