@@ -4,10 +4,10 @@ import (
 	"github.com/m-mizutani/zenv/pkg/infra"
 )
 
-func NewWithMock() (Interface, *infra.Mock) {
+func NewWithMock(options ...Option) (*Usecase, *infra.Mock) {
 	mock := infra.NewMock()
-	uc := New().(*usecase)
+	uc := New(append(options, WithClient(mock))...)
 	uc.config.KeychainNamespacePrefix = "zenv."
-	uc.infra = mock
+	uc.client = mock
 	return uc, mock
 }
