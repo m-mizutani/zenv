@@ -1,19 +1,23 @@
+//go:build darwin
 // +build darwin
 
 package infra
 
 import (
+	"strings"
+
 	"github.com/keybase/go-keychain"
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
+	"github.com/m-mizutani/zenv/pkg/domain/types"
 )
 
-func (x *Infrastructure) PutKeyChainValues(envVars []*model.EnvVar, namespace string) error {
+func (x *client) PutKeyChainValues(envVars []*model.EnvVar, ns types.Namespace) error {
 	for _, v := range envVars {
 		item := keychain.NewItem()
 		item.SetSecClass(keychain.SecClassGenericPassword)
-		item.SetService(namespace)
-		item.SetAccount(v.Key)
+		item.SetService(ns.String())
+		item.SetAccount(v.Key.String())
 		item.SetDescription("zenv")
 		item.SetData([]byte(v.Value))
 		item.SetAccessible(keychain.AccessibleWhenUnlocked)
@@ -24,8 +28,8 @@ func (x *Infrastructure) PutKeyChainValues(envVars []*model.EnvVar, namespace st
 			// Duplicate
 			query := keychain.NewItem()
 			query.SetSecClass(keychain.SecClassGenericPassword)
-			query.SetService(namespace)
-			query.SetAccount(v.Key)
+			query.SetService(ns.String())
+			query.SetAccount(v.Key.String())
 			query.SetMatchLimit(keychain.MatchLimitAll)
 
 			if err := keychain.UpdateItem(query, item); err != nil {
@@ -39,10 +43,52 @@ func (x *Infrastructure) PutKeyChainValues(envVars []*model.EnvVar, namespace st
 	return nil
 }
 
-func (x *Infrastructure) GetKeyChainValues(namespace string) ([]*model.EnvVar, error) {
+func (x *client) GetKeyChainValues(ns types.Namespace) ([]*model.EnvVar, error) {
 	query := keychain.NewItem()
 	query.SetSecClass(keychain.SecClassGenericPassword)
-	query.SetService(namespace)
+	query.SetService(ns.String())
+	query.SetMatchLimit(keychain.MatchLimitAll)
+	query.SetReturnAttributes(true)
+
+	results, err := keychain.QueryItem(query)
+	if err != nil {
+		if err == keychain.ErrorItemNotFound {
+			return nil, types.ErrKeychainNotFound.Wrap(err)
+		}
+		return nil, goerr.Wrap(err, "Fail to get keychain values")
+	}
+	if len(results) == 0 {
+		return nil, goerr.Wrap(types.ErrKeychainNotFound).With("namespace", ns)
+	}
+
+	var envVars []*model.EnvVar
+	for _, result := range results {
+		q := keychain.NewItem()
+		q.SetSecClass(keychain.SecClassGenericPassword)
+		q.SetService(ns.String())
+		q.SetMatchLimit(keychain.MatchLimitOne)
+		q.SetAccount(result.Account)
+		q.SetReturnData(true)
+
+		data, err := keychain.QueryItem(q)
+		if err != nil {
+			return nil, goerr.Wrap(types.ErrKeychainQueryFailed).With("account", result.Account)
+		}
+		envVars = append(envVars, &model.EnvVar{
+			Key:    types.EnvKey(result.Account),
+			Value:  types.EnvValue(data[0].Data),
+			Secret: true,
+		})
+	}
+
+	return envVars, nil
+}
+
+func (x *client) ListKeyChainNamespaces(prefix types.NamespacePrefix) ([]types.Namespace, error) {
+	namespaces := map[types.Namespace]struct{}{}
+
+	query := keychain.NewItem()
+	query.SetSecClass(keychain.SecClassGenericPassword)
 	query.SetMatchLimit(keychain.MatchLimitAll)
 	query.SetReturnAttributes(true)
 
@@ -51,28 +97,33 @@ func (x *Infrastructure) GetKeyChainValues(namespace string) ([]*model.EnvVar, e
 		return nil, goerr.Wrap(err, "Fail to get keychain values")
 	}
 	if len(results) == 0 {
-		return nil, goerr.Wrap(model.ErrKeychainNotFound).With("namespace", namespace)
+		return nil, goerr.Wrap(types.ErrKeychainNotFound).With("prefix", prefix)
 	}
 
-	var envVars []*model.EnvVar
 	for _, result := range results {
-		q := keychain.NewItem()
-		q.SetSecClass(keychain.SecClassGenericPassword)
-		q.SetService(namespace)
-		q.SetMatchLimit(keychain.MatchLimitOne)
-		q.SetAccount(result.Account)
-		q.SetReturnData(true)
-
-		data, err := keychain.QueryItem(q)
-		if err != nil {
-			return nil, goerr.Wrap(model.ErrKeychainQueryFailed).With("account", result.Account)
+		if strings.HasPrefix(result.Service, prefix.String()) {
+			namespaces[types.Namespace(result.Service)] = struct{}{}
 		}
-		envVars = append(envVars, &model.EnvVar{
-			Key:    result.Account,
-			Value:  string(data[0].Data),
-			Secret: true,
-		})
 	}
 
-	return envVars, nil
+	var resp []types.Namespace
+	for ns := range namespaces {
+		resp = append(resp, ns)
+	}
+	return resp, nil
+}
+
+func (x *client) DeleteKeyChainValue(ns types.Namespace, key types.EnvKey) error {
+	q := keychain.NewItem()
+	q.SetSecClass(keychain.SecClassGenericPassword)
+	q.SetService(ns.String())
+	q.SetAccount(key.String())
+	if err := keychain.DeleteItem(q); err != nil {
+		if err == keychain.ErrorItemNotFound {
+			return types.ErrKeychainNotFound.Wrap(err)
+		}
+		return err
+	}
+
+	return nil
 }

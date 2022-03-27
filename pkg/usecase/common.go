@@ -7,6 +7,7 @@ import (
 
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
+	"github.com/m-mizutani/zenv/pkg/domain/types"
 )
 
 const (
@@ -14,7 +15,7 @@ const (
 	envVarFileLoader = "@"
 )
 
-func loadDotEnv(filepath string, readAll func(string) ([]byte, error)) ([]string, error) {
+func loadDotEnv(filepath types.FilePath, readAll func(types.FilePath) ([]byte, error)) (types.Arguments, error) {
 	raw, err := readAll(filepath)
 	if err != nil {
 		if os.IsNotExist(err) && filepath == model.DefaultDotEnvFilePath {
@@ -24,33 +25,34 @@ func loadDotEnv(filepath string, readAll func(string) ([]byte, error)) ([]string
 	}
 
 	lines := strings.Split(string(raw), "\n")
-	var args []string
+	var args types.Arguments
 	for _, line := range lines {
+		line = strings.TrimSpace(line)
 		if len(line) == 0 || strings.HasPrefix(line, "#") {
 			continue // skip
 		}
-		args = append(args, line)
+		args = append(args, types.Argument(line))
 	}
 
 	return args, nil
 }
 
-func (x *usecase) loadEnvVar(arg string) ([]*model.EnvVar, error) {
+func (x *Usecase) loadEnvVar(arg types.Argument) ([]*model.EnvVar, error) {
 	switch {
-	case strings.Index(arg, envVarSeparator) > 0:
-		v := strings.Split(arg, envVarSeparator)
+	case arg.HasEnvVarSeparator():
+		key, value := arg.ToEnvVar()
 		return []*model.EnvVar{
 			{
-				Key:   v[0],
-				Value: strings.Join(v[1:], envVarSeparator),
+				Key:   key,
+				Value: value,
 			},
 		}, nil
 
-	case model.ValidateKeychainNamespace(arg) == nil:
-		namespace := model.KeychainNamespace(x.config.KeychainNamespacePrefix, arg)
-		vars, err := x.infra.GetKeyChainValues(namespace)
+	case arg.IsKeychainNamespace():
+		ns := types.NamespaceSuffix(arg).ToNamespace(x.config.KeychainNamespacePrefix)
+		vars, err := x.client.GetKeyChainValues(ns)
 		if err != nil {
-			if errors.Is(err, model.ErrKeychainNotFound) {
+			if errors.Is(err, types.ErrKeychainNotFound) {
 				return nil, goerr.Wrap(err).With("namespace", arg)
 			}
 			return nil, err
@@ -62,11 +64,11 @@ func (x *usecase) loadEnvVar(arg string) ([]*model.EnvVar, error) {
 	}
 }
 
-func (x *usecase) parseArgs(args []string) ([]string, []*model.EnvVar, error) {
+func (x *Usecase) parseArgs(args types.Arguments) (types.Arguments, []*model.EnvVar, error) {
 	var envVars []*model.EnvVar
 
 	if x.config.DotEnvFile != "" {
-		loaded, err := loadDotEnv(x.config.DotEnvFile, x.infra.ReadFile)
+		loaded, err := loadDotEnv(x.config.DotEnvFile, x.client.ReadFile)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -76,7 +78,7 @@ func (x *usecase) parseArgs(args []string) ([]string, []*model.EnvVar, error) {
 			if err != nil {
 				return nil, nil, err
 			} else if vars == nil {
-				return nil, nil, goerr.Wrap(model.ErrInvalidArgumentFormat, "in dotenv file").With("arg", arg).With("file", x.config.DotEnvFile)
+				return nil, nil, goerr.Wrap(types.ErrInvalidArgumentFormat, "in dotenv file").With("arg", arg).With("file", x.config.DotEnvFile)
 			}
 
 			envVars = append(envVars, vars...)
@@ -96,12 +98,12 @@ func (x *usecase) parseArgs(args []string) ([]string, []*model.EnvVar, error) {
 	}
 
 	for _, v := range envVars {
-		if strings.HasPrefix(v.Value, envVarFileLoader) {
-			body, err := x.infra.ReadFile(strings.TrimPrefix(v.Value, envVarFileLoader))
+		if v.Value.IsFilePath() {
+			body, err := x.client.ReadFile(v.Value.ToFilePath())
 			if err != nil {
 				return nil, nil, goerr.Wrap(err, "failed to open for file loader").With("target", v)
 			}
-			v.Value = string(body)
+			v.Value = types.EnvValue(body)
 		}
 	}
 

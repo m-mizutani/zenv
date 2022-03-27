@@ -1,7 +1,9 @@
 package model
 
-const (
-	AppVersion = "v0.0.3"
+import "github.com/m-mizutani/zenv/pkg/domain/types"
 
-	DefaultDotEnvFilePath = ".env"
+const (
+	AppVersion = "v0.1.0"
+
+	DefaultDotEnvFilePath types.FilePath = ".env"
 )

@@ -2,12 +2,12 @@ package usecase
 
 import (
 	"sort"
-	"strings"
 
 	"github.com/m-mizutani/zenv/pkg/domain/model"
+	"github.com/m-mizutani/zenv/pkg/domain/types"
 )
 
-func replaceArguments(envVars []*model.EnvVar, args []string) []string {
+func replaceArguments(envVars []*model.EnvVar, args types.Arguments) types.Arguments {
 	// Sort by descending order of Key length
 	vars := make([]*model.EnvVar, len(envVars))
 	copy(vars, envVars)
@@ -21,14 +21,14 @@ func replaceArguments(envVars []*model.EnvVar, args []string) []string {
 	for _, v := range vars {
 		key := "%" + v.Key
 		for i := range replaced {
-			replaced[i] = strings.Replace(replaced[i], key, v.Value, -1)
+			replaced[i] = args[i].ReplaceAll(key, v.Value)
 		}
 	}
 
 	return replaced
 }
 
-func (x *usecase) Exec(input *model.ExecInput) error {
+func (x *Usecase) Exec(input *model.ExecInput) error {
 	args, vars, err := x.parseArgs(input.Args)
 	if err != nil {
 		return err
@@ -37,19 +37,19 @@ func (x *usecase) Exec(input *model.ExecInput) error {
 	envVars := append(input.EnvVars, vars...)
 
 	if len(args) < 1 {
-		return model.ErrNotEnoughArgument
+		return types.ErrNotEnoughArgument
 	}
 
 	newArgs := replaceArguments(envVars, args)
 
-	if err := x.infra.Exec(envVars, newArgs); err != nil {
+	if err := x.client.Exec(envVars, newArgs); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (x *usecase) List(input *model.ListInput) error {
+func (x *Usecase) List(input *model.ListInput) error {
 	_, vars, err := x.parseArgs(input.Args)
 	if err != nil {
 		return err
@@ -60,10 +60,10 @@ func (x *usecase) List(input *model.ListInput) error {
 	for _, envVar := range envVars {
 		value := envVar.Value
 		if envVar.Secret {
-			value = strings.Repeat("*", len(envVar.Value)) + " (hidden)"
+			value = value.ToHiddenValue()
 		}
 
-		x.infra.Stdout("%s=%s\n", envVar.Key, value)
+		x.client.Stdout("%s=%s\n", envVar.Key, value)
 	}
 
 	return nil

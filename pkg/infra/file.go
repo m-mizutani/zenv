@@ -1,10 +1,12 @@
 package infra
 
 import (
-	"io/ioutil"
+	"os"
 	"path/filepath"
+
+	"github.com/m-mizutani/zenv/pkg/domain/types"
 )
 
-func (x *Infrastructure) ReadFile(filename string) ([]byte, error) {
-	return ioutil.ReadFile(filepath.Clean(filename))
+func (x *client) ReadFile(filename types.FilePath) ([]byte, error) {
+	return os.ReadFile(filepath.Clean(string(filename)))
 }
