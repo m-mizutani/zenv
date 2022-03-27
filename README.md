@@ -1,17 +1,25 @@
 # zenv ![CI](https://github.com/m-mizutani/zenv/actions/workflows/test.yml/badge.svg) [![Go Report Card](https://goreportcard.com/badge/github.com/m-mizutani/zenv)](https://goreportcard.com/report/github.com/m-mizutani/zenv)
 
-`zenv` is more powerful `env` command to manage environment variables in CLI.
+`zenv` is enhanced `env` command to manage environment variables in CLI.
 
-- Securely save, generate and get secret values in/from Keychain (inspired by [envchain](https://github.com/sorah/envchain))
-- Load `.env` file to import environment variables
+- Load environment variable from `.env` file by
+    - Static values
+    - Reading file content
+    - Executing command
+- Securely save, generate and get secret values with Keychain, inspired by [envchain](https://github.com/sorah/envchain) (supported only macOS)
+- Replace command line argument with loaded environment variable
 
 ## Install
 
 ```sh
-go get github.com/m-mizutani/zenv
+go install github.com/m-mizutani/zenv@latest
 ```
 
 ## Usage
+
+### Set environment variable with `env` command
+
+
 
 ### Save and load secret value(s) to Keychain
 

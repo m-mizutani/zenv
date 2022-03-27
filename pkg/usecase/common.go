@@ -2,8 +2,11 @@ package usecase
 
 import (
 	"errors"
+	"io"
 	"os"
 	"strings"
+
+	"github.com/mattn/go-shellwords"
 
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
@@ -98,12 +101,31 @@ func (x *Usecase) parseArgs(args types.Arguments) (types.Arguments, []*model.Env
 	}
 
 	for _, v := range envVars {
-		if v.Value.IsFilePath() {
+		switch {
+		case v.Value.IsFilePath():
 			body, err := x.client.ReadFile(v.Value.ToFilePath())
 			if err != nil {
 				return nil, nil, goerr.Wrap(err, "failed to open for file loader").With("target", v)
 			}
 			v.Value = types.EnvValue(body)
+
+		case v.Value.IsInnerCommand():
+			cmd := v.Value.ToInnerCommand()
+			args, err := shellwords.Parse(cmd)
+			if err != nil {
+				return nil, nil, goerr.Wrap(err, "can not parse inner command").With("var", v)
+			}
+
+			r, err := x.client.Command(types.NewArguments(args))
+			if err != nil {
+				return nil, nil, goerr.Wrap(err, "failed to execute inner command")
+			}
+			stdout, err := io.ReadAll(r)
+			if err != nil {
+				return nil, nil, goerr.Wrap(err, "failed to read inner command stdout")
+			}
+
+			v.Value = types.EnvValue(stdout)
 		}
 	}
 

@@ -1,7 +1,9 @@
 package infra
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"syscall"
@@ -32,4 +34,27 @@ func (x *client) Exec(vars []*model.EnvVar, args types.Arguments) error {
 	}
 
 	return nil
+}
+
+func (x *client) Command(args types.Arguments) (io.Reader, error) {
+	argv := args.Strings()
+
+	var cmd *exec.Cmd
+	switch len(argv) {
+	case 0:
+		return nil, goerr.Wrap(types.ErrInnerCommandFailed, "no command")
+	case 1:
+		cmd = exec.Command(argv[0]) // #nosec
+	default:
+		cmd = exec.Command(argv[0], argv[1:]...) // #nosec
+	}
+
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+
+	if err := cmd.Run(); err != nil {
+		return nil, types.ErrInnerCommandFailed.Wrap(err).With("argv", argv)
+	}
+
+	return bytes.NewReader(buf.Bytes()), nil
 }

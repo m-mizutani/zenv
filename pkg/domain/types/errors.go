@@ -11,4 +11,5 @@ var (
 	ErrKeychainNotSupported  = goerr.New("keychain is not supported on the OS")
 	ErrEnvVarInvalidName     = goerr.New("invalid environment variable name")
 	ErrGenerateRandom        = goerr.New("crypto/rand failed")
+	ErrInnerCommandFailed    = goerr.New("inner command failed")
 )

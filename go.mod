@@ -8,6 +8,7 @@ require (
 	github.com/keybase/go-keychain v0.0.0-20211119201326-e02f34051621
 	github.com/m-mizutani/goerr v0.1.4
 	github.com/mattn/go-isatty v0.0.14 // indirect
+	github.com/mattn/go-shellwords v1.0.12
 	github.com/rs/zerolog v1.26.1
 	github.com/stretchr/testify v1.7.0
 	github.com/urfave/cli/v2 v2.4.0

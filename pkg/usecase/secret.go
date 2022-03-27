@@ -162,7 +162,7 @@ func (x *Usecase) ExportSecret(input *model.ExportSecretInput) error {
 		if err != nil {
 			return goerr.Wrap(err)
 		}
-		defer fd.Close()
+		defer fd.Close() // #nosec, ignore even if Close() failed
 		w = fd
 		dstName = fd.Name()
 
@@ -171,7 +171,7 @@ func (x *Usecase) ExportSecret(input *model.ExportSecretInput) error {
 		if err != nil {
 			return goerr.Wrap(err)
 		}
-		defer fd.Close()
+		defer fd.Close() // #nosec, ignore even if Close() failed
 		w = fd
 		dstName = string(input.Output)
 	}
@@ -215,7 +215,7 @@ func (x *Usecase) ImportSecret(input *model.ImportSecretInput) error {
 		if err != nil {
 			return goerr.Wrap(err)
 		}
-		defer fd.Close()
+		defer fd.Close() // #nosec, ignore even if Close() failed
 		r = fd
 		srcName = string(input.Input)
 	}

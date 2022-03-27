@@ -7,5 +7,5 @@ import (
 )
 
 func main() {
-	cmd.New().Run(os.Args)
+	cmd.New().Run(os.Args) // #nosec, error should be handled in Run()
 }

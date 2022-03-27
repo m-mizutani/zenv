@@ -1,6 +1,8 @@
 package infra
 
 import (
+	"io"
+
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
 	"github.com/m-mizutani/zenv/pkg/domain/types"
@@ -8,6 +10,7 @@ import (
 
 type Mock struct {
 	ExecMock     func(vars []*model.EnvVar, args types.Arguments) error
+	CommandMock  func(argv types.Arguments) (io.Reader, error)
 	ReadFileMock func(filename types.FilePath) ([]byte, error)
 	PromptMock   func(msg string) string
 	StdoutMock   func(format string, v ...interface{})
@@ -35,6 +38,10 @@ func NewMock() *Mock {
 
 func (x *Mock) Exec(vars []*model.EnvVar, args types.Arguments) error {
 	return x.ExecMock(vars, args)
+}
+
+func (x *Mock) Command(args types.Arguments) (io.Reader, error) {
+	return x.CommandMock(args)
 }
 
 func (x *Mock) ReadFile(filename types.FilePath) ([]byte, error) {

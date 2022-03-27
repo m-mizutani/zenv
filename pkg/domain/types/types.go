@@ -38,6 +38,14 @@ func (x Arguments) Strings() []string {
 	return resp
 }
 
+func NewArguments(args []string) Arguments {
+	argv := make([]Argument, len(args))
+	for i := range args {
+		argv[i] = Argument(args[i])
+	}
+	return argv
+}
+
 func (x Namespace) HasPrefix(p NamespacePrefix) bool {
 	return strings.HasPrefix(x.String(), p.String())
 }
@@ -62,9 +70,10 @@ func (x Namespace) ToSuffix(prefix NamespacePrefix) NamespaceSuffix {
 }
 
 const (
-	envVarSeparator       = "="
-	envVarFileLoader      = "&"
-	keychainNamespaceHead = "@"
+	envVarSeparator         = "="
+	envVarFileLoader        = "&"
+	envVarInnerCommandQuote = "`"
+	keychainNamespaceHead   = "@"
 )
 
 func (x Argument) HasEnvVarSeparator() bool {
@@ -104,4 +113,14 @@ func (x EnvValue) ToFilePath() FilePath {
 
 func (x EnvValue) ToHiddenValue() EnvValue {
 	return EnvValue(strings.Repeat("*", len(x)) + " (hidden)")
+}
+
+func (x EnvValue) IsInnerCommand() bool {
+	return strings.HasPrefix(string(x), envVarInnerCommandQuote) &&
+		strings.HasSuffix(string(x), envVarInnerCommandQuote)
+}
+
+func (x EnvValue) ToInnerCommand() string {
+	s := strings.TrimPrefix(string(x), envVarInnerCommandQuote)
+	return strings.TrimSuffix(s, envVarInnerCommandQuote)
 }

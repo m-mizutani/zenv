@@ -1,12 +1,15 @@
 package infra
 
 import (
+	"io"
+
 	"github.com/m-mizutani/zenv/pkg/domain/model"
 	"github.com/m-mizutani/zenv/pkg/domain/types"
 )
 
 type Client interface {
 	Exec(vars []*model.EnvVar, args types.Arguments) error
+	Command(argv types.Arguments) (io.Reader, error)
 	ReadFile(filename types.FilePath) ([]byte, error)
 	Prompt(msg string) string
 	Stdout(format string, v ...interface{})
