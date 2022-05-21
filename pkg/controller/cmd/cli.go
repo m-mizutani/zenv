@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/m-mizutani/goerr"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
@@ -84,7 +85,7 @@ func (x *Command) Run(args []string) error {
 		var goErr *goerr.Error
 		if errors.As(err, &goErr) {
 			for k, v := range goErr.Values() {
-				ev = ev.Interface(k, v)
+				ev = ev.Interface(fmt.Sprintf("%v", k), v)
 			}
 		}
 		ev.Msg(err.Error())
