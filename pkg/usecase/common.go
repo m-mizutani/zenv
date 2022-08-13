@@ -13,11 +13,6 @@ import (
 	"github.com/m-mizutani/zenv/pkg/domain/types"
 )
 
-const (
-	envVarSeparator  = "="
-	envVarFileLoader = "@"
-)
-
 func loadDotEnv(filepath types.FilePath, readAll func(types.FilePath) ([]byte, error)) (types.Arguments, error) {
 	raw, err := readAll(filepath)
 	if err != nil {
@@ -129,5 +124,15 @@ func (x *Usecase) parseArgs(args types.Arguments) (types.Arguments, []*model.Env
 		}
 	}
 
-	return args[last:], envVars, nil
+	assigned := make([]*model.EnvVar, len(envVars))
+	for i, v := range envVars {
+		newVar := *v
+		for _, r := range envVars {
+			key := "%" + string(r.Key)
+			newVar.Value = types.EnvValue(strings.ReplaceAll(string(newVar.Value), key, string(r.Value)))
+		}
+		assigned[i] = &newVar
+	}
+
+	return args[last:], assigned, nil
 }

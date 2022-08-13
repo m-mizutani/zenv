@@ -130,6 +130,19 @@ AWS_ACCESS_KEY_ID=abcdefghijklmn
 AWS_SECRET_ACCESS_KEY=******************************** (hidden)
 ```
 
+### Replace value in environment variable with another one
+
+`zenv` replaces words having `%` prefix with existing another environment variable.
+
+```sh
+$ cat .env
+MYTOOL_DB_PASSWD=abc123
+PGPASSWORD=%MYTOOL_DB_PASSWD
+$ zenv list
+MYTOOL_DB_PASSWD=abc123
+PGPASSWORD=abc123
+```
+
 ### Replace value in arguments with loaded environment variable
 
 `zenv` replaces words having `%` prefix with loaded environment variable.

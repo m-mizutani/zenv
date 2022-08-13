@@ -147,3 +147,24 @@ func TestFileLoader(t *testing.T) {
 		assert.Equal(t, 0, calledExec)
 	})
 }
+
+func TestAssign(t *testing.T) {
+	uc, mock := usecase.NewWithMock(usecase.WithConfig(&model.Config{
+		DotEnvFile: ".env",
+	}))
+	mock.ReadFileMock = func(filename types.FilePath) ([]byte, error) {
+		return []byte("BLUE=%ORANGE"), nil
+	}
+
+	args, vars, err := usecase.ParseArgs(uc, types.Arguments{
+		"ORANGE=red",
+		"hello",
+	})
+	require.NoError(t, err)
+	require.Len(t, vars, 2)
+	assert.Equal(t, model.EnvVar{
+		Key:   "BLUE",
+		Value: "red",
+	}, *vars[0])
+	assert.Equal(t, args, types.Arguments{"hello"})
+}
