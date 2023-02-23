@@ -4,12 +4,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/m-mizutani/gt"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
 	"github.com/m-mizutani/zenv/pkg/domain/types"
 	"github.com/m-mizutani/zenv/pkg/infra"
 	"github.com/m-mizutani/zenv/pkg/usecase"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestExportImportSecret(t *testing.T) {
@@ -23,12 +22,12 @@ func TestExportImportSecret(t *testing.T) {
 			Secret: true,
 		},
 	}
-	require.NoError(t, mock.PutKeyChainValues(vars, ns))
+	gt.NoError(t, mock.PutKeyChainValues(vars, ns)).Must()
 
 	fd, err := os.CreateTemp("", "")
 	fpath := types.FilePath(fd.Name())
-	require.NoError(t, err)
-	require.NoError(t, fd.Close())
+	gt.NoError(t, err).Must()
+	gt.NoError(t, fd.Close()).Must()
 	defer os.Remove(string(fpath))
 
 	var calledStdout, calledPrompt int
@@ -42,38 +41,35 @@ func TestExportImportSecret(t *testing.T) {
 
 	{
 		// export to file
-		require.NoError(t, uc.ExportSecret(&model.ExportSecretInput{
+		gt.NoError(t, uc.ExportSecret(&model.ExportSecretInput{
 			Output: types.FilePath(fpath),
-		}))
-		assert.Equal(t, 1, calledPrompt)
-		assert.Equal(t, 1, calledStdout)
+		})).Must()
+		gt.V(t, calledPrompt).Equal(1)
+		gt.V(t, calledStdout).Equal(1)
 	}
 
 	// remove temporary
-	require.NoError(t, mock.DeleteKeyChainValue(ns, vars[0].Key))
-	_, err = mock.GetKeyChainValues(ns)
-	require.NoError(t, err)
+	gt.NoError(t, mock.DeleteKeyChainValue(ns, vars[0].Key)).Must()
+	gt.R1(mock.GetKeyChainValues(ns)).NoError(t)
 
 	{
 		// import from file
-		require.NoError(t, uc.ImportSecret(&model.ImportSecretInput{
+		gt.NoError(t, uc.ImportSecret(&model.ImportSecretInput{
 			Input: fpath,
-		}))
-		assert.Equal(t, 2, calledPrompt)
-		assert.Equal(t, 2, calledStdout)
+		})).Must()
+		gt.V(t, calledPrompt).Equal(2)
+		gt.V(t, calledStdout).Equal(2)
 	}
 
-	resp, err := mock.GetKeyChainValues(ns)
-	require.NoError(t, err)
-	require.Len(t, resp, 1)
-	assert.Equal(t, resp[0], vars[0])
+	resp := gt.R1(mock.GetKeyChainValues(ns)).NoError(t)
+	gt.V(t, resp).Equal(vars)
 
 	{
 		// fail to import invalid passphrase
 		mock.PromptMock = func(msg string) string {
 			return "invalid_phrase"
 		}
-		require.Error(t, uc.ImportSecret(&model.ImportSecretInput{
+		gt.Error(t, uc.ImportSecret(&model.ImportSecretInput{
 			Input: fpath,
 		}))
 	}
