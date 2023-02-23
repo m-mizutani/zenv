@@ -4,35 +4,35 @@ import (
 	"os"
 	"testing"
 
+	"github.com/m-mizutani/gt"
 	"github.com/m-mizutani/zenv/pkg/domain/model"
 	"github.com/m-mizutani/zenv/pkg/domain/types"
 	"github.com/m-mizutani/zenv/pkg/usecase"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestWrite(t *testing.T) {
 	t.Run("load keychain variables", func(t *testing.T) {
 		uc, mock := usecase.NewWithMock()
 		mock.ExecMock = func(vars []*model.EnvVar, args types.Arguments) error {
-			require.Len(t, args, 2)
-			assert.Equal(t, types.Argument("this"), args[0])
-			assert.Equal(t, types.Argument("test"), args[1])
-
-			require.Len(t, vars, 1)
-			assert.Equal(t, types.EnvKey("COLOR"), vars[0].Key)
-			assert.Equal(t, types.EnvValue("blue"), vars[0].Value)
+			gt.Array(t, args).Equal([]types.Argument{"this", "test"})
+			gt.Array(t, vars).Equal([]*model.EnvVar{
+				{
+					Key:    "COLOR",
+					Value:  "blue",
+					Secret: true,
+				},
+			})
 
 			return nil
 		}
 
 		mock.PromptMock = func(msg string) string { return "blue" }
-		require.NoError(t, uc.WriteSecret(&model.WriteSecretInput{
+		gt.NoError(t, uc.WriteSecret(&model.WriteSecretInput{
 			Namespace: "@tower",
 			Key:       "COLOR",
 		}))
 
-		require.NoError(t, uc.Exec(&model.ExecInput{
+		gt.NoError(t, uc.Exec(&model.ExecInput{
 			EnvVars: []*model.EnvVar{},
 			Args:    types.Arguments{"@tower", "this", "test"},
 		}))
@@ -40,10 +40,10 @@ func TestWrite(t *testing.T) {
 
 	t.Run("keychain namespace not found", func(t *testing.T) {
 		uc, _ := usecase.NewWithMock()
-		require.ErrorIs(t, uc.Exec(&model.ExecInput{
+		gt.Error(t, uc.Exec(&model.ExecInput{
 			EnvVars: []*model.EnvVar{},
 			Args:    types.Arguments{"@tower", "this", "test"},
-		}), types.ErrKeychainNotFound)
+		})).Is(types.ErrKeychainNotFound)
 	})
 }
 
@@ -51,13 +51,15 @@ func TestGenerate(t *testing.T) {
 	t.Run("generate random secure variable", func(t *testing.T) {
 		uc, mock := usecase.NewWithMock()
 		mock.PutKeyChainValuesMock = func(envVars []*model.EnvVar, namespace types.Namespace) error {
-			require.Len(t, envVars, 1)
-			assert.Equal(t, types.Namespace("zenv.bridge"), namespace)
-			assert.Equal(t, types.EnvKey("SECRET"), envVars[0].Key)
-			assert.Len(t, envVars[0].Value, 24)
+			gt.V(t, namespace).Equal("zenv.bridge")
+			gt.A(t, envVars).Length(1).
+				Elem(0, func(t testing.TB, v *model.EnvVar) {
+					gt.Value(t, v.Key).Equal("SECRET")
+					gt.N(t, len(v.Value)).Equal(24)
+				})
 			return nil
 		}
-		require.NoError(t, uc.GenerateSecret(&model.GenerateSecretInput{
+		gt.NoError(t, uc.GenerateSecret(&model.GenerateSecretInput{
 			Namespace: "@bridge",
 			Key:       "SECRET",
 			Length:    24,
@@ -66,36 +68,36 @@ func TestGenerate(t *testing.T) {
 
 	t.Run("fail if length <= 0", func(t *testing.T) {
 		uc, _ := usecase.NewWithMock()
-		require.ErrorIs(t, uc.GenerateSecret(&model.GenerateSecretInput{
+		gt.Error(t, uc.GenerateSecret(&model.GenerateSecretInput{
 			Namespace: "@bridge",
 			Key:       "SECRET",
 			Length:    0,
-		}), types.ErrInvalidArgument)
+		})).Is(types.ErrInvalidArgument)
 	})
 
 	t.Run("fail if length > 2^16", func(t *testing.T) {
 		uc, _ := usecase.NewWithMock()
-		require.ErrorIs(t, uc.GenerateSecret(&model.GenerateSecretInput{
+		gt.Error(t, uc.GenerateSecret(&model.GenerateSecretInput{
 			Namespace: "@bridge",
 			Key:       "SECRET",
 			Length:    65536,
-		}), types.ErrInvalidArgument)
+		})).Is(types.ErrInvalidArgument)
 	})
 
 	t.Run("fail if key is empty", func(t *testing.T) {
 		uc, _ := usecase.NewWithMock()
-		require.ErrorIs(t, uc.GenerateSecret(&model.GenerateSecretInput{
+		gt.Error(t, uc.GenerateSecret(&model.GenerateSecretInput{
 			Namespace: "@bridge",
 			Length:    24,
-		}), types.ErrInvalidArgument)
+		})).Is(types.ErrInvalidArgument)
 	})
 
 	t.Run("fail if namespaec is empty", func(t *testing.T) {
 		uc, _ := usecase.NewWithMock()
-		require.ErrorIs(t, uc.GenerateSecret(&model.GenerateSecretInput{
+		gt.Error(t, uc.GenerateSecret(&model.GenerateSecretInput{
 			Key:    "blue",
 			Length: 24,
-		}), types.ErrInvalidArgument)
+		})).Is(types.ErrInvalidArgument)
 	})
 }
 
@@ -104,28 +106,29 @@ func TestFileLoader(t *testing.T) {
 		var calledExec int
 		uc, mock := usecase.NewWithMock()
 		mock.ReadFileMock = func(filename types.FilePath) ([]byte, error) {
-			assert.Equal(t, types.FilePath("myfile.txt"), filename)
+			gt.Value(t, filename).Equal("myfile.txt")
 			return []byte("yummy"), nil
 		}
 		mock.ExecMock = func(vars []*model.EnvVar, args types.Arguments) error {
 			calledExec++
-			require.Len(t, vars, 1)
-			require.Len(t, args, 1)
-			assert.Equal(t, &model.EnvVar{
-				Key:    "FILE_VAL",
-				Value:  "yummy",
-				Secret: false,
-			}, vars[0])
-			assert.Equal(t, types.Argument("gogo"), args[0])
+			gt.Array(t, vars).Equal([]*model.EnvVar{
+				{
+					Key:    "FILE_VAL",
+					Value:  "yummy",
+					Secret: false,
+				},
+			})
+			gt.Array(t, args).Length(1)
+			gt.Value(t, args[0]).Equal("gogo")
 			return nil
 		}
-		require.NoError(t, uc.Exec(&model.ExecInput{
+		gt.NoError(t, uc.Exec(&model.ExecInput{
 			Args: types.Arguments{
 				"FILE_VAL=&myfile.txt",
 				"gogo",
 			},
 		}))
-		assert.Equal(t, 1, calledExec)
+		gt.N(t, calledExec).Equal(1)
 	})
 
 	t.Run("fail if not existing file specified", func(t *testing.T) {
@@ -138,13 +141,13 @@ func TestFileLoader(t *testing.T) {
 			calledExec++
 			return nil
 		}
-		require.ErrorIs(t, uc.Exec(&model.ExecInput{
+		gt.Error(t, uc.Exec(&model.ExecInput{
 			Args: types.Arguments{
 				"FILE_VAL=&myfile.txt",
 				"gogo",
 			},
-		}), os.ErrNotExist)
-		assert.Equal(t, 0, calledExec)
+		})).Is(os.ErrNotExist)
+		gt.N(t, calledExec).Equal(0)
 	})
 }
 
@@ -156,15 +159,14 @@ func TestAssign(t *testing.T) {
 		return []byte("BLUE=%ORANGE"), nil
 	}
 
-	args, vars, err := usecase.ParseArgs(uc, types.Arguments{
+	args, vars := gt.R2(usecase.ParseArgs(uc, types.Arguments{
 		"ORANGE=red",
 		"hello",
-	})
-	require.NoError(t, err)
-	require.Len(t, vars, 2)
-	assert.Equal(t, model.EnvVar{
+	})).NoError(t)
+
+	gt.Array(t, vars).Length(2).EqualAt(0, &model.EnvVar{
 		Key:   "BLUE",
 		Value: "red",
-	}, *vars[0])
-	assert.Equal(t, args, types.Arguments{"hello"})
+	})
+	gt.Array(t, args).Equal(types.Arguments{"hello"})
 }
