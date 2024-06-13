@@ -7,18 +7,53 @@ permissions:
   packages: write
 
 jobs:
-  releases-matrix:
-    name: Release Go Binary
+  releases-linux:
+    name: Release Go Binary for Linux
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # keychain library is required for building darwin binary, however it's not available in ubuntu. Then we build only linux binary here.
-        goos: [linux]
         goarch: [amd64, arm64]
+    env:
+      goos: linux
     steps:
       - uses: actions/checkout@v4
-      - uses: wangyoucao577/go-release-action@v1
+      - uses: actions/setup-go@v5
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          goos: ${{ matrix.goos }}
-          goarch: ${{ matrix.goarch }}
+          go-version: "stable"
+      - name: Build
+        run: go build
+        env:
+          GOOS: ${{ env.goos }}
+          GOARCH: ${{ matrix.goarch }}
+      - name: Compress
+        run: tar -zcvf zenv-${{ github.event.release.tag_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz zenv
+      - uses: shogo82148/actions-upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: zenv-${{ github.event.release.tag_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz
+
+  releases-macos:
+    name: Release Go Binary for MacOS
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        goarch: [amd64, arm64]
+    env:
+      goos: darwin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+      - name: Build
+        run: go build
+        env:
+          GOOS: ${{ env.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+      - name: Compress
+        run: tar -zcvf zenv-${{ github.event.release.tag_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz zenv
+      - uses: shogo82148/actions-upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: zenv-${{ github.event.release.tag_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz
