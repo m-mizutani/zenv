@@ -12,7 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux, darwin]
+        # keychain library is required for building darwin binary, however it's not available in ubuntu. Then we build only linux binary here.
+        goos: [linux]
         goarch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
