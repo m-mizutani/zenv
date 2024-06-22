@@ -8,7 +8,8 @@ import (
 
 type Config struct {
 	KeychainNamespacePrefix types.NamespacePrefix
-	DotEnvFile              types.FilePath
+	DotEnvFiles             []types.FilePath
+	OverrideEnvFile         types.FilePath
 }
 
 var envVarNameRegex = regexp.MustCompile("^[a-zA-Z_][a-zA-Z0-9_]*$")

@@ -65,8 +65,8 @@ func (x *Usecase) loadEnvVar(arg types.Argument) ([]*model.EnvVar, error) {
 func (x *Usecase) parseArgs(args types.Arguments) (types.Arguments, []*model.EnvVar, error) {
 	var envVars []*model.EnvVar
 
-	if x.config.DotEnvFile != "" {
-		loaded, err := loadDotEnv(x.config.DotEnvFile, x.client.ReadFile)
+	for _, dotEnvFile := range x.config.DotEnvFiles {
+		loaded, err := loadDotEnv(dotEnvFile, x.client.ReadFile)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -76,7 +76,7 @@ func (x *Usecase) parseArgs(args types.Arguments) (types.Arguments, []*model.Env
 			if err != nil {
 				return nil, nil, err
 			} else if vars == nil {
-				return nil, nil, goerr.Wrap(types.ErrInvalidArgumentFormat, "in dotenv file").With("arg", arg).With("file", x.config.DotEnvFile)
+				return nil, nil, goerr.Wrap(types.ErrInvalidArgumentFormat, "in dotenv file").With("arg", arg).With("file", dotEnvFile)
 			}
 
 			envVars = append(envVars, vars...)

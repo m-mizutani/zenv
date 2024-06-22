@@ -76,7 +76,7 @@ func TestBasicExec(t *testing.T) {
 func TestDotEnv(t *testing.T) {
 	t.Run("exec with dotenv file", func(t *testing.T) {
 		uc, mock := usecase.NewWithMock(usecase.WithConfig(&model.Config{
-			DotEnvFile: ".mydotenv",
+			DotEnvFiles: []types.FilePath{".mydotenv"},
 		}))
 		mock.ExecMock = func(vars []*model.EnvVar, args types.Arguments) error {
 			gt.Array(t, args).
@@ -111,7 +111,7 @@ NUMBER=five
 
 	t.Run("error when invalid line in dotenv file", func(t *testing.T) {
 		uc, mock := usecase.NewWithMock(usecase.WithConfig(
-			&model.Config{DotEnvFile: ".env"},
+			&model.Config{DotEnvFiles: []types.FilePath{".env"}},
 		))
 
 		mock.ReadFileMock = func(filename types.FilePath) ([]byte, error) {
@@ -130,7 +130,7 @@ NUMBER=five
 	t.Run("something bad in reading dotenv", func(t *testing.T) {
 		err := fmt.Errorf("something bad")
 		uc, mock := usecase.NewWithMock(usecase.WithConfig(
-			&model.Config{DotEnvFile: ".env"},
+			&model.Config{DotEnvFiles: []types.FilePath{".env"}},
 		))
 		mock.ReadFileMock = func(filename types.FilePath) ([]byte, error) {
 			return nil, err

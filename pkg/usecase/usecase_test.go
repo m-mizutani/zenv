@@ -153,7 +153,7 @@ func TestFileLoader(t *testing.T) {
 
 func TestAssign(t *testing.T) {
 	uc, mock := usecase.NewWithMock(usecase.WithConfig(&model.Config{
-		DotEnvFile: ".env",
+		DotEnvFiles: []types.FilePath{".env"},
 	}))
 	mock.ReadFileMock = func(filename types.FilePath) ([]byte, error) {
 		return []byte("BLUE=%ORANGE"), nil
