@@ -88,6 +88,31 @@ You can specify arguments to specify loading environment in same manner with exe
 
 ## Advanced Usage
 
+### Overriding environment variable
+
+`zenv` can override environment variable by multiple `-e` option.
+
+```sh
+$ cat .env
+POSTGRES_DB=your_local_db
+POSTGRES_USER=test_user
+$ cat .env.local
+POSTGRES_DB=your_local_dev_db
+$ zenv -e .env -e .env.local psql
+# Access to your_local_dev_db with test_user
+```
+
+The priority for loading environment variables is as follows: first, the `-e` option, followed by additional `-e` options, and finally, the arguments of the `zenv` command.
+
+```sh
+$ cat .env1
+COLOR=blue
+$ cat .env2
+COLOR=orange
+$ zenv -e .env1 -e .env2 COLOR=red echo %COLOR
+red
+```
+
 ### Generate random secure value
 
 `secret generate` subcommand can generate random value like token and save to KeyChain.

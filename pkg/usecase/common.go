@@ -124,6 +124,16 @@ func (x *Usecase) parseArgs(args types.Arguments) (types.Arguments, []*model.Env
 		}
 	}
 
+	// Remove duplicated env vars. The last one is used.
+	unique := make(map[types.EnvKey]*model.EnvVar)
+	for _, v := range envVars {
+		unique[v.Key] = v
+	}
+	envVars = make([]*model.EnvVar, 0, len(unique))
+	for _, v := range unique {
+		envVars = append(envVars, v)
+	}
+
 	assigned := make([]*model.EnvVar, len(envVars))
 	for i, v := range envVars {
 		newVar := *v
