@@ -53,7 +53,7 @@ func TestGenerate(t *testing.T) {
 		mock.PutKeyChainValuesMock = func(envVars []*model.EnvVar, namespace types.Namespace) error {
 			gt.V(t, namespace).Equal("zenv.bridge")
 			gt.A(t, envVars).Length(1).
-				Elem(0, func(t testing.TB, v *model.EnvVar) {
+				At(0, func(t testing.TB, v *model.EnvVar) {
 					gt.Value(t, v.Key).Equal("SECRET")
 					gt.N(t, len(v.Value)).Equal(24)
 				})
@@ -153,7 +153,7 @@ func TestFileLoader(t *testing.T) {
 
 func TestAssign(t *testing.T) {
 	uc, mock := usecase.NewWithMock(usecase.WithConfig(&model.Config{
-		DotEnvFile: ".env",
+		DotEnvFiles: []types.FilePath{".env"},
 	}))
 	mock.ReadFileMock = func(filename types.FilePath) ([]byte, error) {
 		return []byte("BLUE=%ORANGE"), nil

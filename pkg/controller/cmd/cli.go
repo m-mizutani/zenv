@@ -38,6 +38,7 @@ func WithUsecase(usecase *usecase.Usecase) Option {
 
 func (x *Command) Run(args []string) error {
 	var appCfg model.Config
+	var dotEnvFiles cli.StringSlice
 
 	app := &cli.App{
 		Name:    "zenv",
@@ -52,12 +53,19 @@ func (x *Command) Run(args []string) error {
 				Value:       "zenv.",
 			},
 
-			&cli.StringFlag{
+			&cli.StringSliceFlag{
 				Name:        "env-file",
-				Usage:       "specify dotenv file",
+				Usage:       "specify .env file",
 				Aliases:     []string{"e"},
-				Destination: (*string)(&appCfg.DotEnvFile),
-				Value:       (string)(model.DefaultDotEnvFilePath),
+				Destination: &dotEnvFiles,
+				Value:       cli.NewStringSlice(string(model.DefaultDotEnvFilePath)),
+			},
+
+			&cli.StringFlag{
+				Name:        "override",
+				Usage:       "override .env file",
+				Aliases:     []string{"o"},
+				Destination: (*string)(&appCfg.OverrideEnvFile),
 			},
 		},
 		Commands: []*cli.Command{
@@ -66,6 +74,12 @@ func (x *Command) Run(args []string) error {
 		},
 		Before: func(c *cli.Context) error {
 			x.usecase = x.usecase.Clone(usecase.WithConfig(&appCfg))
+
+			appCfg.DotEnvFiles = make([]types.FilePath, len(dotEnvFiles.Value()))
+			for i, v := range dotEnvFiles.Value() {
+				appCfg.DotEnvFiles[i] = types.FilePath(v)
+			}
+
 			return nil
 		},
 		Action: func(c *cli.Context) error {

@@ -7,7 +7,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/keybase/go-keychain v0.0.0-20221221221913-9be78f6c498b
 	github.com/m-mizutani/goerr v0.1.8
-	github.com/m-mizutani/gt v0.0.4-0.20230223020823-2e7042cd92a6
+	github.com/m-mizutani/gt v0.0.10
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/rs/zerolog v1.29.0
 	github.com/urfave/cli/v2 v2.24.4
@@ -15,7 +15,7 @@ require (
 
 require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
