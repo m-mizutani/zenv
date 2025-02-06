@@ -13,10 +13,10 @@ import (
 	"github.com/m-mizutani/zenv/pkg/domain/types"
 )
 
-func loadDotEnv(filepath types.FilePath, readAll func(types.FilePath) ([]byte, error)) (types.Arguments, error) {
+func loadDotEnv(filepath types.FilePath, readAll func(types.FilePath) ([]byte, error), ignoreFileNotFound bool) (types.Arguments, error) {
 	raw, err := readAll(filepath)
 	if err != nil {
-		if os.IsNotExist(err) && filepath == model.DefaultDotEnvFilePath {
+		if os.IsNotExist(err) && (filepath == model.DefaultDotEnvFilePath || ignoreFileNotFound) {
 			return nil, nil // Ignore not exist error for default file path
 		}
 		return nil, goerr.Wrap(err).With("filepath", filepath)
@@ -66,7 +66,8 @@ func (x *Usecase) parseArgs(args types.Arguments) (types.Arguments, []*model.Env
 	var envVars []*model.EnvVar
 
 	for _, dotEnvFile := range x.config.DotEnvFiles {
-		loaded, err := loadDotEnv(dotEnvFile, x.client.ReadFile)
+		_, ignoreEnvFileOpenError := x.config.IgnoreErrors[types.IgnoreEnvFileOpen]
+		loaded, err := loadDotEnv(dotEnvFile, x.client.ReadFile, ignoreEnvFileOpenError)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -138,6 +139,10 @@ func (x *Usecase) parseArgs(args types.Arguments) (types.Arguments, []*model.Env
 	for i, v := range envVars {
 		newVar := *v
 		for _, r := range envVars {
+			if r.Key == v.Key {
+				continue
+			}
+
 			key := "%" + string(r.Key)
 			newVar.Value = types.EnvValue(strings.ReplaceAll(string(newVar.Value), key, string(r.Value)))
 		}

@@ -156,6 +156,7 @@ func TestAssign(t *testing.T) {
 		DotEnvFiles: []types.FilePath{".env"},
 	}))
 	mock.ReadFileMock = func(filename types.FilePath) ([]byte, error) {
+		gt.Value(t, filename).Equal(".env")
 		return []byte("BLUE=%ORANGE"), nil
 	}
 

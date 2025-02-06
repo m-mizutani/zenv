@@ -39,6 +39,7 @@ func WithUsecase(usecase *usecase.Usecase) Option {
 func (x *Command) Run(args []string) error {
 	var appCfg model.Config
 	var dotEnvFiles cli.StringSlice
+	var ignoreErrors cli.StringSlice
 
 	app := &cli.App{
 		Name:    "zenv",
@@ -67,6 +68,13 @@ func (x *Command) Run(args []string) error {
 				Aliases:     []string{"o"},
 				Destination: (*string)(&appCfg.OverrideEnvFile),
 			},
+
+			&cli.StringSliceFlag{
+				Name:        "ignore-error",
+				Usage:       "ignore error [env_file_open]",
+				Aliases:     []string{"i"},
+				Destination: &ignoreErrors,
+			},
 		},
 		Commands: []*cli.Command{
 			x.cmdSecret(),
@@ -78,6 +86,14 @@ func (x *Command) Run(args []string) error {
 			appCfg.DotEnvFiles = make([]types.FilePath, len(dotEnvFiles.Value()))
 			for i, v := range dotEnvFiles.Value() {
 				appCfg.DotEnvFiles[i] = types.FilePath(v)
+			}
+
+			appCfg.IgnoreErrors = make(map[types.IgnoreError]struct{})
+			for _, v := range ignoreErrors.Value() {
+				if !types.IsIgnoreErrorCode(v) {
+					return fmt.Errorf("invalid ignore error: %s", v)
+				}
+				appCfg.IgnoreErrors[types.IgnoreError(v)] = struct{}{}
 			}
 
 			return nil
