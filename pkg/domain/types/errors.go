@@ -13,3 +13,18 @@ var (
 	ErrGenerateRandom        = goerr.New("crypto/rand failed")
 	ErrInnerCommandFailed    = goerr.New("inner command failed")
 )
+
+type IgnoreError string
+
+const (
+	IgnoreEnvFileOpen IgnoreError = "env_file_open"
+)
+
+var ignoreErrorMap = map[IgnoreError]struct{}{
+	IgnoreEnvFileOpen: {},
+}
+
+func IsIgnoreErrorCode(s string) bool {
+	_, ok := ignoreErrorMap[IgnoreError(s)]
+	return ok
+}

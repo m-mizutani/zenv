@@ -169,6 +169,25 @@ func TestReplacement(t *testing.T) {
 	})
 }
 
+func TestIgnoreError(t *testing.T) {
+	t.Run("ignore env file open error", func(t *testing.T) {
+		uc, mock := usecase.NewWithMock(usecase.WithConfig(&model.Config{
+			DotEnvFiles: []types.FilePath{".not_found_env"},
+			IgnoreErrors: map[types.IgnoreError]struct{}{
+				types.IgnoreEnvFileOpen: {},
+			},
+		}))
+		mock.ExecMock = func(vars []*model.EnvVar, args types.Arguments) error {
+			gt.Array(t, args).Equal([]types.Argument{"test"})
+			return nil
+		}
+
+		gt.NoError(t, uc.Exec(&model.ExecInput{
+			Args: types.Arguments{"test"},
+		}))
+	})
+}
+
 func TestOverride(t *testing.T) {
 	type testCase struct {
 		inputFiles []types.FilePath
