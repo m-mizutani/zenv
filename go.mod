@@ -1,11 +1,13 @@
 module github.com/m-mizutani/zenv
 
-go 1.20
+go 1.21
+
+toolchain go1.24.0
 
 require (
 	github.com/Songmu/prompter v0.5.1
 	github.com/google/uuid v1.3.0
-	github.com/keybase/go-keychain v0.0.0-20221221221913-9be78f6c498b
+	github.com/keybase/go-keychain v0.0.1
 	github.com/m-mizutani/goerr v0.1.8
 	github.com/m-mizutani/gt v0.0.10
 	github.com/mattn/go-shellwords v1.0.12
