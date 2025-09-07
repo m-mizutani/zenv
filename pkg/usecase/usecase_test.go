@@ -165,9 +165,14 @@ func TestAssign(t *testing.T) {
 		"hello",
 	})).NoError(t)
 
-	gt.Array(t, vars).Length(2).EqualAt(0, &model.EnvVar{
-		Key:   "BLUE",
-		Value: "red",
-	})
+	gt.Array(t, vars).Length(2).
+		EqualAt(0, &model.EnvVar{
+			Key:   "BLUE",
+			Value: "red",
+		}).
+		EqualAt(1, &model.EnvVar{
+			Key:   "ORANGE",
+			Value: "red",
+		})
 	gt.Array(t, args).Equal(types.Arguments{"hello"})
 }
