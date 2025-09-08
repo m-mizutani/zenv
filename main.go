@@ -3,9 +3,11 @@ package main
 import (
 	"os"
 
-	"github.com/m-mizutani/zenv/pkg/controller/cmd"
+	"github.com/m-mizutani/zenv/pkg/cli"
 )
 
 func main() {
-	cmd.New().Run(os.Args) // #nosec, error should be handled in Run()
+	if err := cli.Run(os.Args); err != nil {
+		os.Exit(1)
+	}
 }
