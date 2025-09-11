@@ -2,18 +2,31 @@
 
 `zenv` is enhanced `env` command to manage environment variables in CLI.
 
-- Load environment variable from `.env` file by
-    - Static values
-    - Reading file content
-    - Executing command
+- Load environment variables from multiple sources:
+    - `.env` files with static values, file content reading, and command execution
+    - TOML configuration files with advanced features
+    - Inline environment variable specification (KEY=value format)
+    - System environment variables
 - Securely save, generate and get secret values with Keychain, inspired by [envchain](https://github.com/sorah/envchain) (supported only macOS)
 - Replace command line argument with loaded environment variable
+- Variable precedence: System < .env < TOML < Inline (later sources override earlier ones)
 
 ## Install <!-- omit in toc -->
 
 ```sh
-go install github.com/m-mizutani/zenv@latest
+go install github.com/m-mizutani/zenv/v2@latest
 ```
+
+## Command Line Options
+
+```sh
+zenv [OPTIONS] [ENVIRONMENT_VARIABLES] [COMMAND] [ARGS...]
+```
+
+### Options
+
+- `-e, --env FILE`: Load environment variables from .env file (can be specified multiple times)
+- `-t, --toml FILE`: Load environment variables from TOML file (can be specified multiple times)
 
 ## Basic Usage
 
@@ -27,15 +40,102 @@ $ zenv POSTGRES_DB=your_local_dev_db psql
 
 ### Load from `.env` file
 
-Automatically load `.env` file and
+Automatically loads `.env` file from current directory. You can also specify custom files with `-e` option.
 
 ```sh
 $ cat .env
 POSTGRES_DB=your_local_db
 POSTGRES_USER=test_user
 PGDATA=/var/lib/db
+
 $ zenv psql -h localhost -p 15432
 # connecting to your_local_db on localhost:15432 as test_user
+
+# Or specify custom .env file
+$ zenv -e production.env psql
+```
+
+### Load from TOML configuration files
+
+TOML files provide advanced configuration options including file content reading and command execution.
+
+```sh
+$ cat .env.toml
+[DATABASE_URL]
+value = "postgresql://localhost/mydb"
+
+[API_SECRET]
+file = "/path/to/secret.txt"
+
+[CURRENT_BRANCH]
+command = "git"
+args = ["rev-parse", "--abbrev-ref", "HEAD"]
+
+[MULTILINE_CONFIG]
+value = """
+line1
+line2
+line3
+"""
+
+$ zenv -t .env.toml myapp
+```
+
+### Multiple files and precedence
+
+You can load from multiple sources. Variables are merged with the following precedence (later sources override earlier ones):
+
+1. System environment variables
+2. `.env` files (in order specified)
+3. TOML files (in order specified)  
+4. Inline variables (KEY=value)
+
+```sh
+# Load from multiple sources
+$ zenv -e base.env -e override.env -t config.toml DATABASE_URL=sqlite://local.db myapp
+```
+
+### List environment variables
+
+Run without a command to see all loaded environment variables:
+
+```sh
+$ zenv
+DATABASE_URL=postgresql://localhost/mydb [.toml]
+API_SECRET=secret_from_file [.toml]
+CURRENT_BRANCH=main [.toml]
+CUSTOM_VAR=inline_value [inline]
+PATH=/usr/bin:/bin [system]
+...
+
+# List with specific configuration
+$ zenv -e production.env -t config.toml
+```
+
+## TOML Configuration Format
+
+TOML files support three types of value specification:
+
+### Static Values
+```toml
+[VARIABLE_NAME]
+value = "static string value"
+```
+
+### File Content Reading
+```toml
+[SECRET_KEY]
+file = "/path/to/secret/file"
+```
+
+### Command Execution
+```toml
+[GIT_COMMIT]
+command = "git"
+args = ["rev-parse", "HEAD"]
+
+[SIMPLE_COMMAND]
+command = "date"
 ```
 
 ## License

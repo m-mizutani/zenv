@@ -1,0 +1,136 @@
+package usecase
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/m-mizutani/zenv/pkg/executor"
+	"github.com/m-mizutani/zenv/pkg/loader"
+	"github.com/m-mizutani/zenv/pkg/model"
+)
+
+type UseCase struct {
+	Loaders  []loader.LoadFunc
+	Executor executor.ExecuteFunc
+}
+
+func NewUseCase(loaders []loader.LoadFunc, exec executor.ExecuteFunc) *UseCase {
+	return &UseCase{
+		Loaders:  loaders,
+		Executor: exec,
+	}
+}
+
+func (uc *UseCase) Run(ctx context.Context, args []string) error {
+	// Parse inline environment variables and command
+	inlineEnvVars, command, commandArgs := parseInlineEnvVars(args)
+
+	// Load environment variables from all loaders
+	var allEnvVars []*model.EnvVar
+
+	// Add system environment variables
+	for _, env := range os.Environ() {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			allEnvVars = append(allEnvVars, &model.EnvVar{
+				Name:   parts[0],
+				Value:  parts[1],
+				Source: model.SourceSystem,
+			})
+		}
+	}
+
+	// Load from file loaders
+	for _, loadFunc := range uc.Loaders {
+		envVars, err := loadFunc(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to load environment variables: %w", err)
+		}
+		allEnvVars = append(allEnvVars, envVars...)
+	}
+
+	// Add inline environment variables
+	allEnvVars = append(allEnvVars, inlineEnvVars...)
+
+	// Merge environment variables (later sources override earlier ones)
+	mergedEnvVars := mergeEnvVars(allEnvVars)
+
+	// If no command is specified, show environment variables
+	if command == "" {
+		showEnvVars(mergedEnvVars)
+		return nil
+	}
+
+	// Execute command with environment variables
+	exitCode, err := uc.Executor(command, commandArgs, mergedEnvVars)
+	if err != nil {
+		return fmt.Errorf("failed to execute command: %w", err)
+	}
+
+	if exitCode != 0 {
+		os.Exit(exitCode)
+	}
+
+	return nil
+}
+
+func parseInlineEnvVars(args []string) ([]*model.EnvVar, string, []string) {
+	var inlineEnvVars []*model.EnvVar
+	commandStart := -1
+
+	for i, arg := range args {
+		if strings.Contains(arg, "=") {
+			parts := strings.SplitN(arg, "=", 2)
+			if len(parts) == 2 {
+				inlineEnvVars = append(inlineEnvVars, &model.EnvVar{
+					Name:   parts[0],
+					Value:  parts[1],
+					Source: model.SourceInline,
+				})
+				continue
+			}
+		}
+		commandStart = i
+		break
+	}
+
+	if commandStart == -1 || commandStart >= len(args) {
+		return inlineEnvVars, "", nil
+	}
+
+	return inlineEnvVars, args[commandStart], args[commandStart+1:]
+}
+
+func mergeEnvVars(envVars []*model.EnvVar) []*model.EnvVar {
+	envMap := make(map[string]*model.EnvVar)
+
+	for _, envVar := range envVars {
+		envMap[envVar.Name] = envVar
+	}
+
+	var result []*model.EnvVar
+	for _, envVar := range envMap {
+		result = append(result, envVar)
+	}
+
+	return result
+}
+
+func showEnvVars(envVars []*model.EnvVar) {
+	for _, envVar := range envVars {
+		var sourceStr string
+		switch envVar.Source {
+		case model.SourceSystem:
+			sourceStr = "system"
+		case model.SourceDotEnv:
+			sourceStr = ".env"
+		case model.SourceTOML:
+			sourceStr = ".toml"
+		case model.SourceInline:
+			sourceStr = "inline"
+		}
+		fmt.Printf("%s=%s [%s]\n", envVar.Name, envVar.Value, sourceStr)
+	}
+}
