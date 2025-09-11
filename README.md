@@ -1,5 +1,8 @@
 # zenv [![CI](https://github.com/m-mizutani/zenv/actions/workflows/test.yml/badge.svg)](https://github.com/m-mizutani/zenv/actions/workflows/test.yml) [![Security Scan](https://github.com/m-mizutani/zenv/actions/workflows/gosec.yml/badge.svg)](https://github.com/m-mizutani/zenv/actions/workflows/gosec.yml) [![Vuln scan](https://github.com/m-mizutani/zenv/actions/workflows/trivy.yml/badge.svg)](https://github.com/m-mizutani/zenv/actions/workflows/trivy.yml) <!-- omit in toc -->
 
+> **⚠️ Breaking Changes in v2**  
+> Version 2 introduces significant changes including new TOML configuration support, modified CLI options, and updated variable precedence. See [Migration Guide](docs/migration.md) for detailed migration instructions.
+
 `zenv` is enhanced `env` command to manage environment variables in CLI.
 
 - Load environment variables from multiple sources:
@@ -14,7 +17,10 @@
 ## Install <!-- omit in toc -->
 
 ```sh
+# Install v2 (the /v2 suffix is required)
 go install github.com/m-mizutani/zenv/v2@latest
+
+# Note: github.com/m-mizutani/zenv@latest will install v1 even after v2 release
 ```
 
 ## Command Line Options
@@ -137,6 +143,17 @@ args = ["rev-parse", "HEAD"]
 [SIMPLE_COMMAND]
 command = "date"
 ```
+
+## Migration from v1 to v2
+
+For detailed migration instructions, see [Migration Guide](docs/migration.md).
+
+### Quick Migration Summary
+
+1. **Update installation**: `go install github.com/m-mizutani/zenv/v2@latest`
+2. **Review precedence**: New order is System < .env < TOML < Inline
+3. **Test existing setup**: Most `.env` usage continues to work unchanged
+4. **Consider TOML**: Optionally migrate complex configurations to TOML for advanced features
 
 ## License
 
