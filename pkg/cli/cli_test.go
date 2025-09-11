@@ -39,7 +39,7 @@ ANOTHER_VAR=another_value`
 		// Restore stdout and read captured output
 		w.Close()
 		os.Stdout = oldStdout
-		buf := make([]byte, 4096)
+		buf := make([]byte, 8192)
 		n, _ := r.Read(buf)
 		output := string(buf[:n])
 
@@ -88,7 +88,7 @@ value = "another_value"`
 		// Restore stdout and read captured output
 		w.Close()
 		os.Stdout = oldStdout
-		buf := make([]byte, 4096)
+		buf := make([]byte, 8192)
 		n, _ := r.Read(buf)
 		output := string(buf[:n])
 
@@ -146,7 +146,7 @@ value = "another_value"`
 		// Restore stdout and read captured output
 		w.Close()
 		os.Stdout = oldStdout
-		buf := make([]byte, 4096)
+		buf := make([]byte, 8192)
 		n, _ := r.Read(buf)
 		output := string(buf[:n])
 
@@ -202,7 +202,7 @@ value = "toml_value"`
 		// Restore stdout and read captured output
 		w.Close()
 		os.Stdout = oldStdout
-		buf := make([]byte, 4096)
+		buf := make([]byte, 8192)
 		n, _ := r.Read(buf)
 		output := string(buf[:n])
 
@@ -274,7 +274,7 @@ value = "toml_value"`
 		// Restore stdout and read captured output
 		w.Close()
 		os.Stdout = oldStdout
-		buf := make([]byte, 4096)
+		buf := make([]byte, 8192)
 		n, _ := r.Read(buf)
 		output := string(buf[:n])
 
@@ -287,9 +287,21 @@ value = "toml_value"`
 	})
 
 	t.Run("Handle non-existent file gracefully", func(t *testing.T) {
+		// Capture stdout to prevent flooding test output
+		r, w, _ := os.Pipe()
+		oldStdout := os.Stdout
+		os.Stdout = w
+
 		// This should not error as non-existent files return nil, nil
 		args := []string{"zenv", "-e", "non_existent.env"}
 		err := cli.Run(context.Background(), args)
+
+		// Restore stdout
+		w.Close()
+		os.Stdout = oldStdout
+		// Read and discard output
+		buf := make([]byte, 1024)
+		r.Read(buf)
 
 		if err != nil {
 			t.Fatalf("expected no error for non-existent file, got %v", err)
