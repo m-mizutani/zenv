@@ -19,7 +19,7 @@ func NewTOMLLoader(path string) LoadFunc {
 
 		var config model.TOMLConfig
 		if _, err := toml.DecodeFile(path, &config); err != nil {
-			return nil, goerr.Wrap(err, "failed to parse TOML file")
+			return nil, goerr.Wrap(err, "failed to parse TOML file", goerr.V("path", path))
 		}
 
 		var envVars []*model.EnvVar
@@ -28,7 +28,7 @@ func NewTOMLLoader(path string) LoadFunc {
 		// First, collect all non-alias values
 		for key, value := range config {
 			if err := value.Validate(); err != nil {
-				return nil, goerr.Wrap(err, "invalid configuration for "+key)
+				return nil, goerr.Wrap(err, "invalid configuration", goerr.V("key", key))
 			}
 
 			if value.Alias != nil {
@@ -45,12 +45,17 @@ func NewTOMLLoader(path string) LoadFunc {
 			case value.File != nil:
 				envValue, err = readFile(*value.File)
 				if err != nil {
-					return nil, goerr.Wrap(err, "failed to read file for "+key)
+					return nil, goerr.Wrap(err, "failed to read file",
+						goerr.V("key", key),
+						goerr.V("file", *value.File))
 				}
 			case value.Command != nil:
 				envValue, err = executeCommand(*value.Command, value.Args)
 				if err != nil {
-					return nil, goerr.Wrap(err, "failed to execute command for "+key)
+					return nil, goerr.Wrap(err, "failed to execute command",
+						goerr.V("key", key),
+						goerr.V("command", *value.Command),
+						goerr.V("args", value.Args))
 				}
 			}
 
@@ -71,7 +76,9 @@ func NewTOMLLoader(path string) LoadFunc {
 
 			resolvedValue, err := aliasResolver.resolve(*value.Alias, key)
 			if err != nil {
-				return nil, goerr.Wrap(err, "failed to resolve alias for "+key)
+				return nil, goerr.Wrap(err, "failed to resolve alias",
+					goerr.V("key", key),
+					goerr.V("alias", *value.Alias))
 			}
 
 			envVar := &model.EnvVar{
@@ -130,15 +137,12 @@ func (r *aliasResolver) resolve(aliasTarget string, currentKey string) (string, 
 func (r *aliasResolver) resolveWithVisited(aliasTarget string, visited map[string]bool) (string, error) {
 	// Check for circular reference
 	if visited[aliasTarget] {
-		return "", goerr.New("circular alias reference detected")
+		return "", goerr.New("circular alias reference detected",
+			goerr.V("target", aliasTarget),
+			goerr.V("visited", visited))
 	}
 
-	// First, check system environment variables
-	if value := os.Getenv(aliasTarget); value != "" {
-		return value, nil
-	}
-
-	// Check if it's already resolved
+	// First, check if it's already resolved from TOML config
 	if value, exists := r.resolvedVars[aliasTarget]; exists {
 		return value, nil
 	}
@@ -154,6 +158,11 @@ func (r *aliasResolver) resolveWithVisited(aliasTarget string, visited map[strin
 		// This shouldn't happen in normal flow, but return empty string for safety
 	}
 
-	// If not found, return empty string (don't error out)
+	// If not found in TOML, check system environment variables
+	if value, ok := os.LookupEnv(aliasTarget); ok {
+		return value, nil
+	}
+
+	// If not found anywhere, return empty string
 	return "", nil
 }

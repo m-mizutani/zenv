@@ -158,6 +158,9 @@ value = "postgresql://primary.example.com/maindb"
 alias = "PRIMARY_DB"
 
 # Alias takes precedence over other value types if multiple are specified
+[SECONDARY_DB]
+value = "postgresql://secondary.example.com/backupdb"
+
 [BACKUP_DB]
 alias = "SECONDARY_DB"  # This will be used
 value = "ignored_value"  # This will be ignored

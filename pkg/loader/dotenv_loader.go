@@ -37,7 +37,10 @@ func NewDotEnvLoader(path string) LoadFunc {
 			// Parse KEY=VALUE
 			parts := strings.SplitN(line, "=", 2)
 			if len(parts) != 2 {
-				return nil, goerr.New("invalid format in .env file")
+				return nil, goerr.New("invalid format in .env file",
+					goerr.V("line", lineNumber),
+					goerr.V("content", line),
+				)
 			}
 
 			key := strings.TrimSpace(parts[0])
