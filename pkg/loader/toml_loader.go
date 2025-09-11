@@ -142,12 +142,7 @@ func (r *aliasResolver) resolveWithVisited(aliasTarget string, visited map[strin
 			goerr.V("visited", visited))
 	}
 
-	// First, check system environment variables
-	if value := os.Getenv(aliasTarget); value != "" {
-		return value, nil
-	}
-
-	// Check if it's already resolved
+	// First, check if it's already resolved from TOML config
 	if value, exists := r.resolvedVars[aliasTarget]; exists {
 		return value, nil
 	}
@@ -163,6 +158,11 @@ func (r *aliasResolver) resolveWithVisited(aliasTarget string, visited map[strin
 		// This shouldn't happen in normal flow, but return empty string for safety
 	}
 
-	// If not found, return empty string (don't error out)
+	// If not found in TOML, check system environment variables
+	if value, ok := os.LookupEnv(aliasTarget); ok {
+		return value, nil
+	}
+
+	// If not found anywhere, return empty string
 	return "", nil
 }

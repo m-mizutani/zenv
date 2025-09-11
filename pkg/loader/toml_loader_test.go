@@ -2,6 +2,7 @@ package loader_test
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -191,6 +192,92 @@ func TestTOMLLoader(t *testing.T) {
 
 		if myVarValue != "system_value" {
 			t.Errorf("MY_VAR should resolve to system environment variable value 'system_value', got %s", myVarValue)
+		}
+	})
+
+	t.Run("Alias precedence: TOML overrides system environment", func(t *testing.T) {
+		// Set a system environment variable
+		t.Setenv("SHARED_VAR", "system_value")
+
+		// Create a TOML file that defines the same variable and an alias to it
+		tomlContent := `
+[SHARED_VAR]
+value = "toml_value"
+
+[ALIAS_TO_SHARED]
+alias = "SHARED_VAR"
+`
+		tmpFile, err := os.CreateTemp("", "test_precedence*.toml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(tmpFile.Name())
+		if _, err := tmpFile.WriteString(tomlContent); err != nil {
+			t.Fatal(err)
+		}
+		tmpFile.Close()
+
+		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
+		envVars, err := loadFunc(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Find the ALIAS_TO_SHARED variable
+		var aliasValue string
+		for _, envVar := range envVars {
+			if envVar.Name == "ALIAS_TO_SHARED" {
+				aliasValue = envVar.Value
+				break
+			}
+		}
+
+		// The alias should resolve to the TOML value, not the system value
+		if aliasValue != "toml_value" {
+			t.Errorf("ALIAS_TO_SHARED should resolve to TOML value 'toml_value', not system value 'system_value', got %s", aliasValue)
+		}
+	})
+
+	t.Run("Alias resolves empty system environment variable", func(t *testing.T) {
+		// Set an empty system environment variable
+		t.Setenv("EMPTY_SYSTEM_VAR", "")
+
+		tomlContent := `
+[ALIAS_TO_EMPTY]
+alias = "EMPTY_SYSTEM_VAR"
+`
+		tmpFile, err := os.CreateTemp("", "test_empty*.toml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(tmpFile.Name())
+		if _, err := tmpFile.WriteString(tomlContent); err != nil {
+			t.Fatal(err)
+		}
+		tmpFile.Close()
+
+		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
+		envVars, err := loadFunc(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Find the ALIAS_TO_EMPTY variable
+		found := false
+		var aliasValue string
+		for _, envVar := range envVars {
+			if envVar.Name == "ALIAS_TO_EMPTY" {
+				found = true
+				aliasValue = envVar.Value
+				break
+			}
+		}
+
+		if !found {
+			t.Error("ALIAS_TO_EMPTY should be present in environment variables")
+		}
+		if aliasValue != "" {
+			t.Errorf("ALIAS_TO_EMPTY should resolve to empty string, got %s", aliasValue)
 		}
 	})
 
