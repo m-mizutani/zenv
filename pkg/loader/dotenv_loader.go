@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/m-mizutani/zenv/pkg/model"
+	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
 func NewDotEnvLoader(path string) LoadFunc {

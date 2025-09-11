@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/m-mizutani/zenv/pkg/model"
+	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
 func NewTOMLLoader(path string) LoadFunc {

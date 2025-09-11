@@ -1,4 +1,4 @@
-module github.com/m-mizutani/zenv
+module github.com/m-mizutani/zenv/v2
 
 go 1.22
 

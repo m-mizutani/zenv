@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/m-mizutani/zenv/pkg/loader"
-	"github.com/m-mizutani/zenv/pkg/model"
+	"github.com/m-mizutani/zenv/v2/pkg/loader"
+	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
 func TestTOMLLoader(t *testing.T) {

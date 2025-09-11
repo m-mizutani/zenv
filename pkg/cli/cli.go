@@ -3,9 +3,9 @@ package cli
 import (
 	"context"
 
-	"github.com/m-mizutani/zenv/pkg/executor"
-	"github.com/m-mizutani/zenv/pkg/loader"
-	"github.com/m-mizutani/zenv/pkg/usecase"
+	"github.com/m-mizutani/zenv/v2/pkg/executor"
+	"github.com/m-mizutani/zenv/v2/pkg/loader"
+	"github.com/m-mizutani/zenv/v2/pkg/usecase"
 	"github.com/urfave/cli/v3"
 )
 

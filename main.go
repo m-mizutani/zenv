@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/m-mizutani/zenv/pkg/cli"
+	"github.com/m-mizutani/zenv/v2/pkg/cli"
 )
 
 func main() {

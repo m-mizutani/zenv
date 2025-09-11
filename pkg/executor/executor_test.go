@@ -3,8 +3,8 @@ package executor_test
 import (
 	"testing"
 
-	"github.com/m-mizutani/zenv/pkg/executor"
-	"github.com/m-mizutani/zenv/pkg/model"
+	"github.com/m-mizutani/zenv/v2/pkg/executor"
+	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
 func TestDefaultExecutor(t *testing.T) {

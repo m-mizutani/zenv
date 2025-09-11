@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/m-mizutani/zenv/pkg/model"
+	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
 func NewDefaultExecutor() ExecuteFunc {
