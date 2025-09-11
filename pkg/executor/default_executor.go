@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"syscall"
 
+	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
@@ -33,7 +34,7 @@ func NewDefaultExecutor() ExecuteFunc {
 					return status.ExitStatus(), nil
 				}
 			}
-			return 1, fmt.Errorf("failed to execute command: %w", err)
+			return 1, goerr.Wrap(err, "failed to execute command")
 		}
 
 		return 0, nil

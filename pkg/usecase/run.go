@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/zenv/v2/pkg/executor"
 	"github.com/m-mizutani/zenv/v2/pkg/loader"
 	"github.com/m-mizutani/zenv/v2/pkg/model"
@@ -46,7 +47,7 @@ func (uc *UseCase) Run(ctx context.Context, args []string) error {
 	for _, loadFunc := range uc.Loaders {
 		envVars, err := loadFunc(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to load environment variables: %w", err)
+			return goerr.Wrap(err, "failed to load environment variables")
 		}
 		allEnvVars = append(allEnvVars, envVars...)
 	}
@@ -66,7 +67,7 @@ func (uc *UseCase) Run(ctx context.Context, args []string) error {
 	// Execute command with environment variables
 	exitCode, err := uc.Executor(command, commandArgs, mergedEnvVars)
 	if err != nil {
-		return fmt.Errorf("failed to execute command: %w", err)
+		return goerr.Wrap(err, "failed to execute command")
 	}
 
 	if exitCode != 0 {

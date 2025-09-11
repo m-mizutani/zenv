@@ -11,6 +11,7 @@ type TOMLValue struct {
 	File    *string  `toml:"file,omitempty"`
 	Command *string  `toml:"command,omitempty"`
 	Args    []string `toml:"args,omitempty"`
+	Alias   *string  `toml:"alias,omitempty"`
 }
 
 func (v TOMLValue) Validate() error {
@@ -24,12 +25,15 @@ func (v TOMLValue) Validate() error {
 	if v.Command != nil {
 		count++
 	}
+	if v.Alias != nil {
+		count++
+	}
 
 	if count == 0 {
 		return goerr.New("no value specified")
 	}
 	if count > 1 {
-		return goerr.New("multiple value types specified")
+		return goerr.New("multiple value types specified (only one of value, file, command, or alias can be specified)")
 	}
 	return nil
 }

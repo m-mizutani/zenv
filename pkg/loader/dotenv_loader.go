@@ -3,10 +3,10 @@ package loader
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"os"
 	"strings"
 
+	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
@@ -17,7 +17,7 @@ func NewDotEnvLoader(path string) LoadFunc {
 			if os.IsNotExist(err) {
 				return nil, nil // File not found is acceptable
 			}
-			return nil, fmt.Errorf("failed to open .env file: %w", err)
+			return nil, goerr.Wrap(err, "failed to open .env file")
 		}
 		defer file.Close()
 
@@ -37,7 +37,7 @@ func NewDotEnvLoader(path string) LoadFunc {
 			// Parse KEY=VALUE
 			parts := strings.SplitN(line, "=", 2)
 			if len(parts) != 2 {
-				return nil, fmt.Errorf("invalid format at line %d: %s", lineNumber, line)
+				return nil, goerr.New("invalid format in .env file")
 			}
 
 			key := strings.TrimSpace(parts[0])
@@ -59,7 +59,7 @@ func NewDotEnvLoader(path string) LoadFunc {
 		}
 
 		if err := scanner.Err(); err != nil {
-			return nil, fmt.Errorf("failed to read .env file: %w", err)
+			return nil, goerr.Wrap(err, "failed to read .env file")
 		}
 
 		return envVars, nil

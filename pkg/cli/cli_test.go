@@ -301,7 +301,7 @@ value = "toml_value"`
 		os.Stdout = oldStdout
 		// Read and discard output
 		buf := make([]byte, 1024)
-		r.Read(buf)
+		_, _ = r.Read(buf)
 
 		if err != nil {
 			t.Fatalf("expected no error for non-existent file, got %v", err)

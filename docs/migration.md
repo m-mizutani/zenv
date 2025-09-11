@@ -207,6 +207,24 @@ value = """
 """
 ```
 
+#### Alias Support (NEW in v2)
+```toml
+# Reference system environment variables
+[USER_HOME]
+alias = "HOME"
+
+# Reference other variables in the same file
+[PRIMARY_DB]
+value = "postgresql://primary.db.com/myapp"
+
+[DATABASE_URL]
+alias = "PRIMARY_DB"
+
+# Create alternative names for existing variables
+[DB_CONNECTION]
+alias = "DATABASE_URL"
+```
+
 ### 2. Multiple File Support
 
 ```bash

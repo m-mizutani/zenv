@@ -1,0 +1,10 @@
+# Test file for system environment variable aliasing
+
+[MY_VAR]
+alias = "TEST_SYSTEM_VAR"
+
+[HOME_DIR]
+alias = "HOME"
+
+[PATH_VAR]
+alias = "PATH"
