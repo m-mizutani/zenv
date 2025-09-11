@@ -4,10 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`zenv` is an enhanced `env` command to manage environment variables in CLI. It's a Go-based tool that:
-- Loads environment variables from `.env` files (static values, file content, command execution)
-- Securely manages secrets using macOS Keychain
-- Replaces command arguments with environment variables
+`zenv` v2 is an enhanced `env` command to manage environment variables in CLI. It's a Go-based tool that:
+- Loads environment variables from multiple sources with clear precedence
+- Supports both `.env` files (simple key-value pairs) and TOML files (advanced configuration)
+- Allows file content reading and command execution for dynamic values
+- Supports inline environment variable specification (KEY=value format)
+- Replaces command arguments with environment variables using `%` prefix
 
 ## Restriction & Rules
 
@@ -57,26 +59,36 @@ go test ./pkg/... -run TestName
 
 ## Architecture
 
-The project is currently undergoing a rebuild (branch: rebuild/v2). The architecture follows a clean architecture pattern:
+The v2 rebuild has been completed with a clean architecture pattern:
 
 - `main.go`: Entry point that calls `cli.Run()`
-- `pkg/cli/`: CLI interface layer (currently minimal implementation)
-- Previous structure (being refactored):
-  - `pkg/controller/`: Command handling
-  - `pkg/domain/`: Core business logic and models
-  - `pkg/infra/`: External dependencies (file system, keychain, execution)
-  - `pkg/usecase/`: Application use cases
+- `pkg/cli/`: CLI interface layer - handles command line parsing and execution
+- `pkg/usecase/`: Application use cases - orchestrates business logic
+- `pkg/loader/`: Environment variable loaders
+  - `dotenv_loader.go`: Loads variables from .env files
+  - `toml_loader.go`: Loads variables from TOML files with advanced features
+- `pkg/executor/`: Command execution layer
+  - `executor.go`: Interface for command execution
+  - `default_executor.go`: Default implementation using os/exec
+- `pkg/model/`: Core domain models
+  - `config.go`: Configuration structures
+  - `env.go`: Environment variable models
 
-## Key Features to Maintain
+## Key Features
 
-1. **Environment Loading Priority**: `-e` options → additional `-e` options → command arguments
-2. **Secret Management**: Namespaces must have `@` prefix
-3. **Variable Replacement**: Words with `%` prefix are replaced with environment variables
-4. **File Content Loading**: `&` prefix loads file content as variable value
-5. **Command Execution**: Backticks execute commands and use output as variable value
+1. **Environment Variable Priority**: System < .env < TOML < Inline (later sources override earlier ones)
+2. **Variable Replacement**: Words with `%` prefix in command arguments are replaced with environment variables
+3. **TOML Configuration**: Supports three modes for each variable:
+   - `value`: Direct string value (supports multiline)
+   - `file`: Load content from file
+   - `command` + `args`: Execute command and use output as value
+4. **.env File Format**: Simple KEY=VALUE pairs with support for:
+   - File content loading: `KEY=&/path/to/file`
+   - Command execution: `` KEY=`command` ``
+   - Comments: Lines starting with `#`
 
 ## Development Notes
 
 - Main branch for PRs: `main`
-- Current working branch: `rebuild/v2`
-- Significant refactoring in progress - many files have been deleted and new structure is being built in `pkg/cli/`
+- Version: v2 (major rewrite completed)
+- Migration guide available at `docs/migration.md` for users upgrading from v1
