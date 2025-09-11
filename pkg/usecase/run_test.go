@@ -2,6 +2,7 @@ package usecase_test
 
 import (
 	"context"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -190,12 +191,11 @@ func TestUseCase(t *testing.T) {
 
 		err := uc.Run(context.Background(), []string{})
 
-		// Restore stdout and read captured output
+		// Restore stdout and read all captured output
 		w.Close()
 		os.Stdout = oldStdout
-		buf := make([]byte, 4096)
-		n, _ := r.Read(buf)
-		output := string(buf[:n])
+		outputBytes, _ := io.ReadAll(r)
+		output := string(outputBytes)
 
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -219,12 +219,11 @@ func TestUseCase(t *testing.T) {
 		// Call with inline var but no command (empty args after inline var)
 		err := uc.Run(context.Background(), []string{"INLINE_VAR=inline_value"})
 
-		// Restore stdout and read captured output
+		// Restore stdout and read all captured output
 		w.Close()
 		os.Stdout = oldStdout
-		buf := make([]byte, 4096)
-		n, _ := r.Read(buf)
-		output := string(buf[:n])
+		outputBytes, _ := io.ReadAll(r)
+		output := string(outputBytes)
 
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
