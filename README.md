@@ -120,7 +120,7 @@ $ zenv -e production.env -t config.toml
 
 ## TOML Configuration Format
 
-TOML files support three types of value specification:
+TOML files support four types of value specification:
 
 ### Static Values
 ```toml
@@ -143,6 +143,27 @@ args = ["rev-parse", "HEAD"]
 [SIMPLE_COMMAND]
 command = "date"
 ```
+
+### Alias (Reference to Another Variable)
+```toml
+# Reference a system environment variable
+[APP_HOME]
+alias = "HOME"
+
+# Reference another variable defined in the same TOML file
+[PRIMARY_DB]
+value = "postgresql://primary.example.com/maindb"
+
+[DATABASE_URL]
+alias = "PRIMARY_DB"
+
+# Alias takes precedence over other value types if multiple are specified
+[BACKUP_DB]
+alias = "SECONDARY_DB"  # This will be used
+value = "ignored_value"  # This will be ignored
+```
+
+**Note**: Only one of `value`, `file`, `command`, or `alias` can be specified per variable. Circular references (e.g., A→B→A) will result in an error.
 
 ## Migration from v1 to v2
 

@@ -143,4 +143,100 @@ func TestTOMLLoader(t *testing.T) {
 		// The 'false' command exits with non-zero status but doesn't produce an error
 		// So we check for the empty output case
 	})
+
+	t.Run("Load TOML file with alias", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/alias.toml")
+		envVars, err := loadFunc(context.Background())
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Check that alias resolves correctly
+		aliasVars := make(map[string]string)
+		for _, envVar := range envVars {
+			aliasVars[envVar.Name] = envVar.Value
+		}
+
+		// DATABASE_URL should resolve to the value of PRIMARY_DB
+		if aliasVars["DATABASE_URL"] != aliasVars["PRIMARY_DB"] {
+			t.Errorf("DATABASE_URL should resolve to PRIMARY_DB value, got %s", aliasVars["DATABASE_URL"])
+		}
+
+		// BACKUP_DATABASE should resolve to the value of SECONDARY_DB
+		if aliasVars["BACKUP_DATABASE"] != aliasVars["SECONDARY_DB"] {
+			t.Errorf("BACKUP_DATABASE should resolve to SECONDARY_DB value, got %s", aliasVars["BACKUP_DATABASE"])
+		}
+	})
+
+	t.Run("Alias resolves system environment variable", func(t *testing.T) {
+		// Set a system environment variable for testing
+		t.Setenv("TEST_SYSTEM_VAR", "system_value")
+
+		loadFunc := loader.NewTOMLLoader("testdata/alias_system.toml")
+		envVars, err := loadFunc(context.Background())
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Find the MY_VAR environment variable
+		var myVarValue string
+		for _, envVar := range envVars {
+			if envVar.Name == "MY_VAR" {
+				myVarValue = envVar.Value
+				break
+			}
+		}
+
+		if myVarValue != "system_value" {
+			t.Errorf("MY_VAR should resolve to system environment variable value 'system_value', got %s", myVarValue)
+		}
+	})
+
+	t.Run("Alias with non-existent target returns empty string", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/alias_missing.toml")
+		envVars, err := loadFunc(context.Background())
+
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Find the MISSING_ALIAS environment variable
+		var missingValue string
+		for _, envVar := range envVars {
+			if envVar.Name == "MISSING_ALIAS" {
+				missingValue = envVar.Value
+				break
+			}
+		}
+
+		if missingValue != "" {
+			t.Errorf("MISSING_ALIAS should resolve to empty string when target doesn't exist, got %s", missingValue)
+		}
+	})
+
+	t.Run("Handle circular alias reference", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/circular_alias.toml")
+		_, err := loadFunc(context.Background())
+
+		if err == nil {
+			t.Error("expected error for circular alias reference")
+		}
+		if !strings.Contains(err.Error(), "circular alias reference") {
+			t.Errorf("expected error to contain 'circular alias reference', got %s", err.Error())
+		}
+	})
+
+	t.Run("Validation error when multiple types including alias", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/alias_multiple_types.toml")
+		_, err := loadFunc(context.Background())
+
+		if err == nil {
+			t.Error("expected error for multiple value types")
+		}
+		if !strings.Contains(err.Error(), "multiple value types specified") {
+			t.Errorf("expected error to contain 'multiple value types specified', got %s", err.Error())
+		}
+	})
 }
