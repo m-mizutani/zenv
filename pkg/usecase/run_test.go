@@ -20,11 +20,11 @@ func TestUseCase(t *testing.T) {
 		var executedArgs []string
 		var executedEnvVars []*model.EnvVar
 
-		mockExecutor := func(cmd string, args []string, envVars []*model.EnvVar) (int, error) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
 			executedCmd = cmd
 			executedArgs = args
 			executedEnvVars = envVars
-			return 0, nil
+			return nil
 		}
 
 		uc := usecase.NewUseCase([]loader.LoadFunc{}, mockExecutor)
@@ -56,9 +56,9 @@ func TestUseCase(t *testing.T) {
 			}, nil
 		}
 
-		mockExecutor := func(cmd string, args []string, envVars []*model.EnvVar) (int, error) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
 			executedEnvVars = envVars
-			return 0, nil
+			return nil
 		}
 
 		uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, mockExecutor)
@@ -87,9 +87,9 @@ func TestUseCase(t *testing.T) {
 			}, nil
 		}
 
-		mockExecutor := func(cmd string, args []string, envVars []*model.EnvVar) (int, error) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
 			executedEnvVars = envVars
-			return 0, nil
+			return nil
 		}
 
 		uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, mockExecutor)
@@ -124,9 +124,9 @@ func TestUseCase(t *testing.T) {
 			}, nil
 		}
 
-		mockExecutor := func(cmd string, args []string, envVars []*model.EnvVar) (int, error) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
 			executedEnvVars = envVars
-			return 0, nil
+			return nil
 		}
 
 		uc := usecase.NewUseCase([]loader.LoadFunc{loader1, loader2}, mockExecutor)
@@ -213,9 +213,9 @@ func TestUseCase(t *testing.T) {
 	t.Run("Parse inline environment variables correctly", func(t *testing.T) {
 		var executedEnvVars []*model.EnvVar
 
-		mockExecutor := func(cmd string, args []string, envVars []*model.EnvVar) (int, error) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
 			executedEnvVars = envVars
-			return 0, nil
+			return nil
 		}
 
 		uc := usecase.NewUseCase([]loader.LoadFunc{}, mockExecutor)

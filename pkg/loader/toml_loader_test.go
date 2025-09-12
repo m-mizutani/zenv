@@ -370,7 +370,7 @@ template = "Static template text"
 
 		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
-		
+
 		gt.Equal(t, len(envVars), 1)
 		gt.Equal(t, envVars[0].Name, "NO_REFS")
 		gt.Equal(t, envVars[0].Value, "Static template text")
@@ -461,7 +461,7 @@ alias = "TEMPLATE_VAR"
 	t.Run("Handle complex circular references (alias->template->alias)", func(t *testing.T) {
 		loadFunc := loader.NewTOMLLoader("testdata/complex_circular.toml")
 		_, err := loadFunc(context.Background())
-		
+
 		// Should detect circular reference in any of the complex cases
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("circular reference")
@@ -487,7 +487,7 @@ alias = "VAR_A"
 
 		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
-		
+
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("circular reference")
 	})
@@ -509,7 +509,7 @@ alias = "SELF_TEMPLATE"
 
 		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
-		
+
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("circular reference")
 	})

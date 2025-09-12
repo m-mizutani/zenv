@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/m-mizutani/ctxlog"
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/zenv/v2/pkg/executor"
 	"github.com/m-mizutani/zenv/v2/pkg/loader"
@@ -25,8 +26,12 @@ func NewUseCase(loaders []loader.LoadFunc, exec executor.ExecuteFunc) *UseCase {
 }
 
 func (uc *UseCase) Run(ctx context.Context, args []string) error {
+	logger := ctxlog.From(ctx)
+	logger.Debug("starting zenv run", "args", args)
+
 	// Parse inline environment variables and command
 	inlineEnvVars, command, commandArgs := parseInlineEnvVars(args)
+	logger.Debug("parsed arguments", "inline_vars", len(inlineEnvVars), "command", command, "command_args", commandArgs)
 
 	// Load environment variables from all loaders
 	var allEnvVars []*model.EnvVar
@@ -54,26 +59,31 @@ func (uc *UseCase) Run(ctx context.Context, args []string) error {
 
 	// Add inline environment variables
 	allEnvVars = append(allEnvVars, inlineEnvVars...)
+	logger.Debug("loaded environment variables", "total", len(allEnvVars))
 
 	// Merge environment variables (later sources override earlier ones)
 	mergedEnvVars := mergeEnvVars(allEnvVars)
+	logger.Debug("merged environment variables", "final_count", len(mergedEnvVars))
 
 	// If no command is specified, show environment variables
 	if command == "" {
+		logger.Info("displaying environment variables", "count", len(mergedEnvVars))
 		showEnvVars(mergedEnvVars)
 		return nil
 	}
 
 	// Execute command with environment variables
-	exitCode, err := uc.Executor(command, commandArgs, mergedEnvVars)
+	logger.Info("executing command", "command", command, "args", commandArgs, "env_vars", len(mergedEnvVars))
+	err := uc.Executor(ctx, command, commandArgs, mergedEnvVars)
 	if err != nil {
-		return goerr.Wrap(err, "failed to execute command")
+		exitCode := model.GetExitCode(err)
+		if exitCode != 1 { // Only log if it's not the default error code
+			logger.Info("command completed with non-zero exit code", "exit_code", exitCode)
+		}
+		return err // Return the error with embedded exit code
 	}
 
-	if exitCode != 0 {
-		os.Exit(exitCode)
-	}
-
+	logger.Debug("command completed successfully")
 	return nil
 }
 

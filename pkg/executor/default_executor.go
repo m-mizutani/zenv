@@ -1,18 +1,23 @@
 package executor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
 
+	"github.com/m-mizutani/ctxlog"
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
 func NewDefaultExecutor() ExecuteFunc {
-	return func(cmd string, args []string, envVars []*model.EnvVar) (int, error) {
-		command := exec.Command(cmd, args...)
+	return func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
+		logger := ctxlog.From(ctx)
+		logger.Debug("executing command", "cmd", cmd, "args", args, "env_vars", len(envVars))
+
+		command := exec.CommandContext(ctx, cmd, args...)
 
 		// Set environment variables
 		env := os.Environ()
@@ -31,12 +36,16 @@ func NewDefaultExecutor() ExecuteFunc {
 			// Extract exit code
 			if exitError, ok := err.(*exec.ExitError); ok {
 				if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-					return status.ExitStatus(), nil
+					exitCode := status.ExitStatus()
+					logger.Warn("command exited with non-zero code", "cmd", cmd, "exit_code", exitCode)
+					return model.WithExitCode(goerr.Wrap(err, "command exited with non-zero code"), exitCode)
 				}
 			}
-			return 1, goerr.Wrap(err, "failed to execute command")
+			logger.Error("failed to execute command", "cmd", cmd, "error", err)
+			return model.WithExitCode(goerr.Wrap(err, "failed to execute command"), 1)
 		}
 
-		return 0, nil
+		logger.Debug("command executed successfully", "cmd", cmd)
+		return nil
 	}
 }

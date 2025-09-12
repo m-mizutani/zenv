@@ -9,18 +9,24 @@ import (
 	"text/template"
 
 	"github.com/BurntSushi/toml"
+	"github.com/m-mizutani/ctxlog"
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
 func NewTOMLLoader(path string) LoadFunc {
 	return func(ctx context.Context) ([]*model.EnvVar, error) {
+		logger := ctxlog.From(ctx)
+		logger.Debug("loading TOML file", "path", path)
+
 		if _, err := os.Stat(path); os.IsNotExist(err) {
+			logger.Debug("TOML file not found", "path", path)
 			return nil, nil // File not found is acceptable
 		}
 
 		var config model.TOMLConfig
 		if _, err := toml.DecodeFile(path, &config); err != nil {
+			logger.Error("failed to parse TOML file", "path", path, "error", err)
 			return nil, goerr.Wrap(err, "failed to parse TOML file", goerr.V("path", path))
 		}
 
@@ -31,11 +37,14 @@ func NewTOMLLoader(path string) LoadFunc {
 		var envVars []*model.EnvVar
 		for key, value := range config {
 			if err := value.Validate(); err != nil {
+				logger.Error("invalid TOML configuration", "key", key, "error", err)
 				return nil, goerr.Wrap(err, "invalid configuration", goerr.V("key", key))
 			}
 
+			logger.Debug("resolving TOML variable", "key", key)
 			resolvedValue, err := resolver.resolve(key)
 			if err != nil {
+				logger.Error("failed to resolve TOML variable", "key", key, "error", err)
 				return nil, goerr.Wrap(err, "failed to resolve variable",
 					goerr.V("key", key))
 			}
@@ -48,6 +57,7 @@ func NewTOMLLoader(path string) LoadFunc {
 			envVars = append(envVars, envVar)
 		}
 
+		logger.Debug("loaded TOML file", "path", path, "variables", len(envVars))
 		return envVars, nil
 	}
 }
@@ -187,4 +197,3 @@ func (r *unifiedResolver) resolve(key string) (string, error) {
 	r.resolvedVars[key] = resolvedValue
 	return resolvedValue, nil
 }
-
