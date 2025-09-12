@@ -20,7 +20,7 @@ func TestUseCase(t *testing.T) {
 		var executedArgs []string
 		var executedEnvVars []*model.EnvVar
 
-		mockExecutor := func(cmd string, args []string, envVars []*model.EnvVar) (int, error) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) (int, error) {
 			executedCmd = cmd
 			executedArgs = args
 			executedEnvVars = envVars
@@ -56,7 +56,7 @@ func TestUseCase(t *testing.T) {
 			}, nil
 		}
 
-		mockExecutor := func(cmd string, args []string, envVars []*model.EnvVar) (int, error) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) (int, error) {
 			executedEnvVars = envVars
 			return 0, nil
 		}
@@ -87,7 +87,7 @@ func TestUseCase(t *testing.T) {
 			}, nil
 		}
 
-		mockExecutor := func(cmd string, args []string, envVars []*model.EnvVar) (int, error) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) (int, error) {
 			executedEnvVars = envVars
 			return 0, nil
 		}
@@ -124,7 +124,7 @@ func TestUseCase(t *testing.T) {
 			}, nil
 		}
 
-		mockExecutor := func(cmd string, args []string, envVars []*model.EnvVar) (int, error) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) (int, error) {
 			executedEnvVars = envVars
 			return 0, nil
 		}
@@ -213,7 +213,7 @@ func TestUseCase(t *testing.T) {
 	t.Run("Parse inline environment variables correctly", func(t *testing.T) {
 		var executedEnvVars []*model.EnvVar
 
-		mockExecutor := func(cmd string, args []string, envVars []*model.EnvVar) (int, error) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) (int, error) {
 			executedEnvVars = envVars
 			return 0, nil
 		}

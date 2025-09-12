@@ -1,5 +1,9 @@
 package executor
 
-import "github.com/m-mizutani/zenv/v2/pkg/model"
+import (
+	"context"
 
-type ExecuteFunc func(cmd string, args []string, envVars []*model.EnvVar) (int, error)
+	"github.com/m-mizutani/zenv/v2/pkg/model"
+)
+
+type ExecuteFunc func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) (int, error)
