@@ -18,7 +18,7 @@ func NewTOMLLoader(path string) LoadFunc {
 	return func(ctx context.Context) ([]*model.EnvVar, error) {
 		logger := ctxlog.From(ctx)
 		logger.Debug("loading TOML file", "path", path)
-		
+
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			logger.Debug("TOML file not found", "path", path)
 			return nil, nil // File not found is acceptable
@@ -197,4 +197,3 @@ func (r *unifiedResolver) resolve(key string) (string, error) {
 	r.resolvedVars[key] = resolvedValue
 	return resolvedValue, nil
 }
-

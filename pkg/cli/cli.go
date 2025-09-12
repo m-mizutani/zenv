@@ -10,6 +10,7 @@ import (
 	"github.com/m-mizutani/ctxlog"
 	"github.com/m-mizutani/zenv/v2/pkg/executor"
 	"github.com/m-mizutani/zenv/v2/pkg/loader"
+	"github.com/m-mizutani/zenv/v2/pkg/model"
 	"github.com/m-mizutani/zenv/v2/pkg/usecase"
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
@@ -37,43 +38,29 @@ func NewLoggerWithFormat(level slog.Level, w io.Writer, format Format) *slog.Log
 		w = os.Stdout
 	}
 
-	var handler slog.Handler
+	useConsole := format == FormatConsole
+	if format == FormatAuto {
+		isTerminal := false
+		if f, ok := w.(*os.File); ok {
+			isTerminal = term.IsTerminal(int(f.Fd()))
+		}
+		useConsole = isTerminal
+	}
 
-	switch format {
-	case FormatConsole:
-		// Force console output with colors
+	var handler slog.Handler
+	if useConsole {
+		// Console output with colors
 		handler = clog.New(
 			clog.WithWriter(w),
 			clog.WithLevel(level),
 			clog.WithTimeFmt("15:04:05"),
 			clog.WithSource(false),
 		)
-	case FormatJSON:
-		// Force JSON output
+	} else {
+		// JSON output for non-terminal (logs, CI/CD, etc.)
 		handler = slog.NewJSONHandler(w, &slog.HandlerOptions{
 			Level: level,
 		})
-	case FormatAuto:
-		// Auto-detect based on terminal
-		isTerminal := false
-		if f, ok := w.(*os.File); ok {
-			isTerminal = term.IsTerminal(int(f.Fd()))
-		}
-
-		if isTerminal {
-			// Console output with colors
-			handler = clog.New(
-				clog.WithWriter(w),
-				clog.WithLevel(level),
-				clog.WithTimeFmt("15:04:05"),
-				clog.WithSource(false),
-			)
-		} else {
-			// JSON output for non-terminal (logs, CI/CD, etc.)
-			handler = slog.NewJSONHandler(w, &slog.HandlerOptions{
-				Level: level,
-			})
-		}
 	}
 
 	return slog.New(handler)
@@ -127,10 +114,10 @@ func Run(ctx context.Context, args []string) error {
 			// Create logger based on log-level flag
 			level := ParseLogLevel(logLevel)
 			logger := NewLogger(level, os.Stderr)
-			
+
 			// Set logger in context for propagation
 			ctx = ctxlog.With(ctx, logger)
-			
+
 			var loaders []loader.LoadFunc
 
 			// Add .env files specified by -e option
@@ -165,7 +152,12 @@ func Run(ctx context.Context, args []string) error {
 				args = []string{} // Force empty args to show environment variables
 			}
 
-			return uc.Run(ctx, args)
+			err := uc.Run(ctx, args)
+			if err != nil {
+				exitCode := model.GetExitCode(err)
+				return model.WithExitCode(err, exitCode)
+			}
+			return nil
 		},
 	}
 

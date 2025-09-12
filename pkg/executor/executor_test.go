@@ -17,8 +17,8 @@ func TestDefaultExecutor(t *testing.T) {
 			{Name: "TEST_VAR", Value: "test_value", Source: model.SourceSystem},
 		}
 
-		exitCode := gt.R1(execFunc(context.Background(), "echo", []string{"hello"}, envVars)).NoError(t)
-		gt.Equal(t, exitCode, 0)
+		err := execFunc(context.Background(), "echo", []string{"hello"}, envVars)
+		gt.NoError(t, err)
 	})
 
 	t.Run("Execute command with environment variables", func(t *testing.T) {
@@ -29,8 +29,8 @@ func TestDefaultExecutor(t *testing.T) {
 		}
 
 		// Test with a command that uses environment variables
-		exitCode := gt.R1(execFunc(context.Background(), "sh", []string{"-c", "test -n \"$TEST_VAR\""}, envVars)).NoError(t)
-		gt.Equal(t, exitCode, 0)
+		err := execFunc(context.Background(), "sh", []string{"-c", "test -n \"$TEST_VAR\""}, envVars)
+		gt.NoError(t, err)
 	})
 
 	t.Run("Handle command that returns non-zero exit code", func(t *testing.T) {
@@ -38,7 +38,9 @@ func TestDefaultExecutor(t *testing.T) {
 		envVars := []*model.EnvVar{}
 
 		// Test with a command that exits with code 1
-		exitCode := gt.R1(execFunc(context.Background(), "sh", []string{"-c", "exit 1"}, envVars)).NoError(t)
+		err := execFunc(context.Background(), "sh", []string{"-c", "exit 1"}, envVars)
+		gt.Error(t, err)
+		exitCode := model.GetExitCode(err)
 		gt.Equal(t, exitCode, 1)
 	})
 
@@ -47,7 +49,9 @@ func TestDefaultExecutor(t *testing.T) {
 		envVars := []*model.EnvVar{}
 
 		// Test with a command that exits with code 42
-		exitCode := gt.R1(execFunc(context.Background(), "sh", []string{"-c", "exit 42"}, envVars)).NoError(t)
+		err := execFunc(context.Background(), "sh", []string{"-c", "exit 42"}, envVars)
+		gt.Error(t, err)
+		exitCode := model.GetExitCode(err)
 		gt.Equal(t, exitCode, 42)
 	})
 
@@ -55,8 +59,10 @@ func TestDefaultExecutor(t *testing.T) {
 		execFunc := executor.NewDefaultExecutor()
 		envVars := []*model.EnvVar{}
 
-		_, err := execFunc(context.Background(), "nonexistentcommand123", []string{}, envVars)
+		err := execFunc(context.Background(), "nonexistentcommand123", []string{}, envVars)
 		gt.Error(t, err)
+		exitCode := model.GetExitCode(err)
+		gt.Equal(t, exitCode, 1) // Should return default exit code 1 for command not found
 	})
 
 	t.Run("Execute command with empty arguments", func(t *testing.T) {
@@ -65,8 +71,8 @@ func TestDefaultExecutor(t *testing.T) {
 			{Name: "TEST_VAR", Value: "test_value", Source: model.SourceSystem},
 		}
 
-		exitCode := gt.R1(execFunc(context.Background(), "true", []string{}, envVars)).NoError(t)
-		gt.Equal(t, exitCode, 0)
+		err := execFunc(context.Background(), "true", []string{}, envVars)
+		gt.NoError(t, err)
 	})
 
 	t.Run("Pass through stdout and stderr", func(t *testing.T) {
@@ -74,20 +80,20 @@ func TestDefaultExecutor(t *testing.T) {
 		envVars := []*model.EnvVar{}
 
 		// Command that produces output on stdout
-		exitCode := gt.R1(execFunc(context.Background(), "echo", []string{"test output"}, envVars)).NoError(t)
-		gt.Equal(t, exitCode, 0)
+		err := execFunc(context.Background(), "echo", []string{"test output"}, envVars)
+		gt.NoError(t, err)
 
 		// Command that produces output on stderr
-		exitCode = gt.R1(execFunc(context.Background(), "sh", []string{"-c", ">&2 echo error output; exit 0"}, envVars)).NoError(t)
-		gt.Equal(t, exitCode, 0)
+		err = execFunc(context.Background(), "sh", []string{"-c", ">&2 echo error output; exit 0"}, envVars)
+		gt.NoError(t, err)
 	})
 
 	t.Run("Execute command with multiple arguments", func(t *testing.T) {
 		execFunc := executor.NewDefaultExecutor()
 		envVars := []*model.EnvVar{}
 
-		exitCode := gt.R1(execFunc(context.Background(), "echo", []string{"arg1", "arg2", "arg3"}, envVars)).NoError(t)
-		gt.Equal(t, exitCode, 0)
+		err := execFunc(context.Background(), "echo", []string{"arg1", "arg2", "arg3"}, envVars)
+		gt.NoError(t, err)
 	})
 
 	t.Run("Execute command with special characters in arguments", func(t *testing.T) {
@@ -96,8 +102,8 @@ func TestDefaultExecutor(t *testing.T) {
 
 		// Test with various special characters
 		args := []string{"$VAR", "\"quoted\"", "'single'", "space test", "new\nline"}
-		exitCode := gt.R1(execFunc(context.Background(), "echo", args, envVars)).NoError(t)
-		gt.Equal(t, exitCode, 0)
+		err := execFunc(context.Background(), "echo", args, envVars)
+		gt.NoError(t, err)
 	})
 
 	t.Run("Environment variables are properly set", func(t *testing.T) {
@@ -107,7 +113,7 @@ func TestDefaultExecutor(t *testing.T) {
 		}
 
 		// Check if the environment variable is accessible
-		exitCode := gt.R1(execFunc(context.Background(), "sh", []string{"-c", "[ \"$CUSTOM_VAR\" = \"custom_value\" ]"}, envVars)).NoError(t)
-		gt.Equal(t, exitCode, 0)
+		err := execFunc(context.Background(), "sh", []string{"-c", "[ \"$CUSTOM_VAR\" = \"custom_value\" ]"}, envVars)
+		gt.NoError(t, err)
 	})
 }

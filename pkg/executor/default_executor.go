@@ -13,7 +13,7 @@ import (
 )
 
 func NewDefaultExecutor() ExecuteFunc {
-	return func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) (int, error) {
+	return func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
 		logger := ctxlog.From(ctx)
 		logger.Debug("executing command", "cmd", cmd, "args", args, "env_vars", len(envVars))
 
@@ -38,14 +38,14 @@ func NewDefaultExecutor() ExecuteFunc {
 				if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
 					exitCode := status.ExitStatus()
 					logger.Warn("command exited with non-zero code", "cmd", cmd, "exit_code", exitCode)
-					return exitCode, nil
+					return model.WithExitCode(goerr.Wrap(err, "command exited with non-zero code"), exitCode)
 				}
 			}
 			logger.Error("failed to execute command", "cmd", cmd, "error", err)
-			return 1, goerr.Wrap(err, "failed to execute command")
+			return model.WithExitCode(goerr.Wrap(err, "failed to execute command"), 1)
 		}
 
 		logger.Debug("command executed successfully", "cmd", cmd)
-		return 0, nil
+		return nil
 	}
 }
