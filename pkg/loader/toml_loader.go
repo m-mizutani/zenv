@@ -177,7 +177,7 @@ func (r *unifiedResolver) resolve(key string) (string, error) {
 		if err := tmpl.Execute(&buf, context); err != nil {
 			return "", goerr.Wrap(err, "failed to execute template",
 				goerr.V("template", *config.Template),
-				goerr.V("context", context))
+				goerr.V("key", key))
 		}
 
 		resolvedValue = buf.String()
