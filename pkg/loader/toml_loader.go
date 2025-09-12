@@ -1,10 +1,12 @@
 package loader
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
 	"strings"
+	"text/template"
 
 	"github.com/BurntSushi/toml"
 	"github.com/m-mizutani/goerr/v2"
@@ -22,63 +24,20 @@ func NewTOMLLoader(path string) LoadFunc {
 			return nil, goerr.Wrap(err, "failed to parse TOML file", goerr.V("path", path))
 		}
 
-		var envVars []*model.EnvVar
-		aliasResolver := newAliasResolver(config)
+		// Create unified resolver
+		resolver := newUnifiedResolver(config)
 
-		// First, collect all non-alias values
+		// Resolve all variables
+		var envVars []*model.EnvVar
 		for key, value := range config {
 			if err := value.Validate(); err != nil {
 				return nil, goerr.Wrap(err, "invalid configuration", goerr.V("key", key))
 			}
 
-			if value.Alias != nil {
-				// Skip alias values for now, will process them later
-				continue
-			}
-
-			var envValue string
-			var err error
-
-			switch {
-			case value.Value != nil:
-				envValue = *value.Value
-			case value.File != nil:
-				envValue, err = readFile(*value.File)
-				if err != nil {
-					return nil, goerr.Wrap(err, "failed to read file",
-						goerr.V("key", key),
-						goerr.V("file", *value.File))
-				}
-			case value.Command != nil:
-				envValue, err = executeCommand(*value.Command, value.Args)
-				if err != nil {
-					return nil, goerr.Wrap(err, "failed to execute command",
-						goerr.V("key", key),
-						goerr.V("command", *value.Command),
-						goerr.V("args", value.Args))
-				}
-			}
-
-			envVar := &model.EnvVar{
-				Name:   key,
-				Value:  envValue,
-				Source: model.SourceTOML,
-			}
-			envVars = append(envVars, envVar)
-			aliasResolver.addResolvedVar(key, envValue)
-		}
-
-		// Then, resolve all alias values
-		for key, value := range config {
-			if value.Alias == nil {
-				continue
-			}
-
-			resolvedValue, err := aliasResolver.resolve(*value.Alias, key)
+			resolvedValue, err := resolver.resolve(key)
 			if err != nil {
-				return nil, goerr.Wrap(err, "failed to resolve alias",
-					goerr.V("key", key),
-					goerr.V("alias", *value.Alias))
+				return nil, goerr.Wrap(err, "failed to resolve variable",
+					goerr.V("key", key))
 			}
 
 			envVar := &model.EnvVar{
@@ -110,59 +69,122 @@ func executeCommand(command string, args []string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// aliasResolver handles alias resolution with circular reference detection
-type aliasResolver struct {
+// unifiedResolver handles resolution of all variable types with circular reference detection
+type unifiedResolver struct {
 	config       model.TOMLConfig
 	resolvedVars map[string]string
+	resolving    map[string]bool // Track variables currently being resolved
+	systemEnvs   map[string]string
 }
 
-func newAliasResolver(config model.TOMLConfig) *aliasResolver {
-	return &aliasResolver{
+func newUnifiedResolver(config model.TOMLConfig) *unifiedResolver {
+	// Cache system environment variables
+	systemEnvs := make(map[string]string)
+	for _, env := range os.Environ() {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			systemEnvs[parts[0]] = parts[1]
+		}
+	}
+
+	return &unifiedResolver{
 		config:       config,
 		resolvedVars: make(map[string]string),
+		resolving:    make(map[string]bool),
+		systemEnvs:   systemEnvs,
 	}
 }
 
-func (r *aliasResolver) addResolvedVar(key string, value string) {
-	r.resolvedVars[key] = value
-}
+func (r *unifiedResolver) resolve(key string) (string, error) {
+	// Check if already resolved
+	if value, exists := r.resolvedVars[key]; exists {
+		return value, nil
+	}
 
-func (r *aliasResolver) resolve(aliasTarget string, currentKey string) (string, error) {
-	// Track visited keys to detect circular references
-	visited := make(map[string]bool)
-	visited[currentKey] = true // Mark the current key as visited to prevent self-reference
-	return r.resolveWithVisited(aliasTarget, visited)
-}
-
-func (r *aliasResolver) resolveWithVisited(aliasTarget string, visited map[string]bool) (string, error) {
 	// Check for circular reference
-	if visited[aliasTarget] {
-		return "", goerr.New("circular alias reference detected",
-			goerr.V("target", aliasTarget),
-			goerr.V("visited", visited))
+	if r.resolving[key] {
+		return "", goerr.New("circular reference detected",
+			goerr.V("key", key))
 	}
 
-	// First, check if it's already resolved from TOML config
-	if value, exists := r.resolvedVars[aliasTarget]; exists {
-		return value, nil
-	}
+	// Mark as currently resolving
+	r.resolving[key] = true
+	defer delete(r.resolving, key)
 
-	// Check if the target exists in config and is an alias itself
-	if targetConfig, exists := r.config[aliasTarget]; exists {
-		if targetConfig.Alias != nil {
-			// Mark this target as visited and recursively resolve
-			visited[aliasTarget] = true
-			return r.resolveWithVisited(*targetConfig.Alias, visited)
+	// Get the configuration for this key
+	config, exists := r.config[key]
+	if !exists {
+		// Not in TOML config, check system environment
+		if value, exists := r.systemEnvs[key]; exists {
+			r.resolvedVars[key] = value
+			return value, nil
 		}
-		// If it's not an alias but exists in config, it should have been resolved already
-		// This shouldn't happen in normal flow, but return empty string for safety
+		// Not found anywhere
+		return "", nil
 	}
 
-	// If not found in TOML, check system environment variables
-	if value, ok := os.LookupEnv(aliasTarget); ok {
-		return value, nil
+	// Resolve based on type
+	var resolvedValue string
+	var err error
+
+	switch {
+	case config.Value != nil:
+		resolvedValue = *config.Value
+
+	case config.File != nil:
+		resolvedValue, err = readFile(*config.File)
+		if err != nil {
+			return "", goerr.Wrap(err, "failed to read file",
+				goerr.V("file", *config.File))
+		}
+
+	case config.Command != nil:
+		resolvedValue, err = executeCommand(*config.Command, config.Args)
+		if err != nil {
+			return "", goerr.Wrap(err, "failed to execute command",
+				goerr.V("command", *config.Command),
+				goerr.V("args", config.Args))
+		}
+
+	case config.Alias != nil:
+		// Recursively resolve the alias target
+		resolvedValue, err = r.resolve(*config.Alias)
+		if err != nil {
+			return "", goerr.Wrap(err, "failed to resolve alias",
+				goerr.V("alias", *config.Alias))
+		}
+
+	case config.Template != nil:
+		// Build context for template
+		context := make(map[string]string)
+		for _, ref := range config.Refs {
+			refValue, err := r.resolve(ref)
+			if err != nil {
+				return "", goerr.Wrap(err, "failed to resolve template reference",
+					goerr.V("ref", ref))
+			}
+			context[ref] = refValue
+		}
+
+		// Parse and execute template
+		tmpl, err := template.New("env").Parse(*config.Template)
+		if err != nil {
+			return "", goerr.Wrap(err, "failed to parse template",
+				goerr.V("template", *config.Template))
+		}
+
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, context); err != nil {
+			return "", goerr.Wrap(err, "failed to execute template",
+				goerr.V("template", *config.Template),
+				goerr.V("key", key))
+		}
+
+		resolvedValue = buf.String()
 	}
 
-	// If not found anywhere, return empty string
-	return "", nil
+	// Cache the resolved value
+	r.resolvedVars[key] = resolvedValue
+	return resolvedValue, nil
 }
+

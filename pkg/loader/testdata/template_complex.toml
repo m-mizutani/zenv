@@ -1,0 +1,66 @@
+# Complex template scenarios
+
+# Template with empty references
+[EMPTY_VAR]
+value = ""
+
+[WITH_EMPTY]
+template = "Value: [{{ .EMPTY_VAR }}]"
+refs = ["EMPTY_VAR"]
+
+# Template with system environment variable
+[SYSTEM_VAR_TEMPLATE]
+template = "Path: {{ .PATH }}"
+refs = ["PATH"]
+
+# Template with non-existent reference
+[MISSING_REF_TEMPLATE]
+template = "Missing: [{{ .NON_EXISTENT }}]"
+refs = ["NON_EXISTENT"]
+
+# Template with range iteration
+[ITEM_1]
+value = "apple"
+
+[ITEM_2]  
+value = "banana"
+
+[ITEM_3]
+value = "cherry"
+
+# Template with complex logic
+[DEBUG_MODE]
+value = "true"
+
+[LOG_LEVEL]
+value = "info"
+
+[LOG_CONFIG]
+template = "{{ if eq .DEBUG_MODE \"true\" }}debug{{ else }}{{ .LOG_LEVEL }}{{ end }}"
+refs = ["DEBUG_MODE", "LOG_LEVEL"]
+
+# Nested template references
+[BASE_URL]
+value = "https://api.example.com"
+
+[API_VERSION]
+value = "v2"
+
+[API_PATH]
+template = "{{ .BASE_URL }}/{{ .API_VERSION }}"
+refs = ["BASE_URL", "API_VERSION"]
+
+[FULL_ENDPOINT]
+template = "{{ .API_PATH }}/users"
+refs = ["API_PATH"]
+
+# Template with string manipulation
+[USERNAME]
+value = "john_doe"
+
+[DOMAIN]
+value = "example.com"
+
+[EMAIL]
+template = "{{ .USERNAME }}@{{ .DOMAIN }}"
+refs = ["USERNAME", "DOMAIN"]

@@ -225,6 +225,42 @@ alias = "PRIMARY_DB"
 alias = "DATABASE_URL"
 ```
 
+#### Template Support (NEW in v2)
+```toml
+# Combine multiple variables using Go templates
+[DB_USER]
+value = "admin"
+
+[DB_PASS]
+file = "/secrets/db_password"
+
+[DB_HOST]
+value = "localhost"
+
+[DB_PORT]
+value = "5432"
+
+[DB_NAME]
+value = "myapp"
+
+[DATABASE_URL]
+template = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:{{ .DB_PORT }}/{{ .DB_NAME }}"
+refs = ["DB_USER", "DB_PASS", "DB_HOST", "DB_PORT", "DB_NAME"]
+
+# Conditional configuration
+[USE_STAGING]
+value = "true"
+
+[API_ENDPOINT]
+template = "{{ if .USE_STAGING }}https://staging.api.example.com{{ else }}https://api.example.com{{ end }}"
+refs = ["USE_STAGING"]
+
+# Combine paths
+[LOG_PATH]
+template = "{{ .HOME }}/logs/{{ .APP_NAME }}.log"
+refs = ["HOME", "APP_NAME"]
+```
+
 ### 2. Multiple File Support
 
 ```bash

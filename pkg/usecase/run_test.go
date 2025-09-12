@@ -4,9 +4,9 @@ import (
 	"context"
 	"io"
 	"os"
-	"strings"
 	"testing"
 
+	"github.com/m-mizutani/gt"
 	"github.com/m-mizutani/zenv/v2/pkg/executor"
 	"github.com/m-mizutani/zenv/v2/pkg/loader"
 	"github.com/m-mizutani/zenv/v2/pkg/model"
@@ -31,15 +31,10 @@ func TestUseCase(t *testing.T) {
 
 		err := uc.Run(context.Background(), []string{"VAR1=value1", "VAR2=value2", "echo", "hello"})
 
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if executedCmd != "echo" {
-			t.Errorf("expected command 'echo', got '%s'", executedCmd)
-		}
-		if len(executedArgs) != 1 || executedArgs[0] != "hello" {
-			t.Errorf("expected args ['hello'], got %v", executedArgs)
-		}
+		gt.NoError(t, err)
+		gt.Equal(t, executedCmd, "echo")
+		gt.Equal(t, len(executedArgs), 1)
+		gt.Equal(t, executedArgs[0], "hello")
 
 		// Check that inline variables are present
 		inlineVars := make(map[string]string)
@@ -48,12 +43,8 @@ func TestUseCase(t *testing.T) {
 				inlineVars[envVar.Name] = envVar.Value
 			}
 		}
-		if inlineVars["VAR1"] != "value1" {
-			t.Errorf("expected VAR1=value1, got %s", inlineVars["VAR1"])
-		}
-		if inlineVars["VAR2"] != "value2" {
-			t.Errorf("expected VAR2=value2, got %s", inlineVars["VAR2"])
-		}
+		gt.Equal(t, inlineVars["VAR1"], "value1")
+		gt.Equal(t, inlineVars["VAR2"], "value2")
 	})
 
 	t.Run("Run with loader environment variables", func(t *testing.T) {
@@ -74,9 +65,7 @@ func TestUseCase(t *testing.T) {
 
 		err := uc.Run(context.Background(), []string{"echo", "test"})
 
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		gt.NoError(t, err)
 
 		// Check that loader variable is present
 		found := false
@@ -86,9 +75,7 @@ func TestUseCase(t *testing.T) {
 				break
 			}
 		}
-		if !found {
-			t.Error("expected LOADER_VAR from loader to be present")
-		}
+		gt.True(t, found)
 	})
 
 	t.Run("Variable precedence: inline overrides loader", func(t *testing.T) {
@@ -109,19 +96,13 @@ func TestUseCase(t *testing.T) {
 
 		err := uc.Run(context.Background(), []string{"CONFLICT_VAR=inline_value", "echo", "test"})
 
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		gt.NoError(t, err)
 
 		// Check that inline variable overrides loader variable
 		for _, envVar := range executedEnvVars {
 			if envVar.Name == "CONFLICT_VAR" {
-				if envVar.Value != "inline_value" {
-					t.Errorf("expected CONFLICT_VAR=inline_value, got %s", envVar.Value)
-				}
-				if envVar.Source != model.SourceInline {
-					t.Errorf("expected source %v, got %v", model.SourceInline, envVar.Source)
-				}
+				gt.Equal(t, envVar.Value, "inline_value")
+				gt.Equal(t, envVar.Source, model.SourceInline)
 				return
 			}
 		}
@@ -152,9 +133,7 @@ func TestUseCase(t *testing.T) {
 
 		err := uc.Run(context.Background(), []string{"echo", "test"})
 
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		gt.NoError(t, err)
 
 		// Check that both loader variables are present
 		foundLoader1 := false
@@ -167,12 +146,8 @@ func TestUseCase(t *testing.T) {
 				foundLoader2 = true
 			}
 		}
-		if !foundLoader1 {
-			t.Error("expected LOADER1_VAR to be present")
-		}
-		if !foundLoader2 {
-			t.Error("expected LOADER2_VAR to be present")
-		}
+		gt.True(t, foundLoader1)
+		gt.True(t, foundLoader2)
 	})
 
 	t.Run("Show environment variables when no command specified", func(t *testing.T) {
@@ -194,18 +169,11 @@ func TestUseCase(t *testing.T) {
 		// Restore stdout and read all captured output
 		w.Close()
 		os.Stdout = oldStdout
-		outputBytes, _ := io.ReadAll(r)
-		output := string(outputBytes)
+		output := string(gt.R1(io.ReadAll(r)).NoError(t))
 
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if !strings.Contains(output, "TEST_VAR=test_value") {
-			t.Errorf("expected output to contain 'TEST_VAR=test_value', got '%s'", output)
-		}
-		if !strings.Contains(output, "[.env]") {
-			t.Errorf("expected output to contain '[.env]', got '%s'", output)
-		}
+		gt.NoError(t, err)
+		gt.S(t, output).Contains("TEST_VAR=test_value")
+		gt.S(t, output).Contains("[.env]")
 	})
 
 	t.Run("Show environment variables with inline vars only", func(t *testing.T) {
@@ -222,18 +190,11 @@ func TestUseCase(t *testing.T) {
 		// Restore stdout and read all captured output
 		w.Close()
 		os.Stdout = oldStdout
-		outputBytes, _ := io.ReadAll(r)
-		output := string(outputBytes)
+		output := string(gt.R1(io.ReadAll(r)).NoError(t))
 
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		if !strings.Contains(output, "INLINE_VAR=inline_value") {
-			t.Errorf("expected output to contain 'INLINE_VAR=inline_value', got '%s'", output)
-		}
-		if !strings.Contains(output, "[inline]") {
-			t.Errorf("expected output to contain '[inline]', got '%s'", output)
-		}
+		gt.NoError(t, err)
+		gt.S(t, output).Contains("INLINE_VAR=inline_value")
+		gt.S(t, output).Contains("[inline]")
 	})
 
 	t.Run("Handle loader error", func(t *testing.T) {
@@ -245,12 +206,8 @@ func TestUseCase(t *testing.T) {
 
 		err := uc.Run(context.Background(), []string{"echo", "test"})
 
-		if err == nil {
-			t.Error("expected error from loader")
-		}
-		if !strings.Contains(err.Error(), "failed to load environment variables") {
-			t.Errorf("expected error message to contain 'failed to load environment variables', got %s", err.Error())
-		}
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("failed to load environment variables")
 	})
 
 	t.Run("Parse inline environment variables correctly", func(t *testing.T) {
@@ -266,9 +223,7 @@ func TestUseCase(t *testing.T) {
 		// Test parsing complex inline variables
 		err := uc.Run(context.Background(), []string{"VAR_WITH_EQUALS=value=with=equals", "EMPTY_VAR=", "echo", "test"})
 
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
+		gt.NoError(t, err)
 
 		// Check inline variables
 		inlineVars := make(map[string]string)
@@ -278,11 +233,7 @@ func TestUseCase(t *testing.T) {
 			}
 		}
 
-		if inlineVars["VAR_WITH_EQUALS"] != "value=with=equals" {
-			t.Errorf("expected VAR_WITH_EQUALS=value=with=equals, got %s", inlineVars["VAR_WITH_EQUALS"])
-		}
-		if inlineVars["EMPTY_VAR"] != "" {
-			t.Errorf("expected EMPTY_VAR=, got %s", inlineVars["EMPTY_VAR"])
-		}
+		gt.Equal(t, inlineVars["VAR_WITH_EQUALS"], "value=with=equals")
+		gt.Equal(t, inlineVars["EMPTY_VAR"], "")
 	})
 }

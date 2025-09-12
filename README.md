@@ -166,7 +166,55 @@ alias = "SECONDARY_DB"  # This will be used
 value = "ignored_value"  # This will be ignored
 ```
 
-**Note**: Only one of `value`, `file`, `command`, or `alias` can be specified per variable. Circular references (e.g., A→B→A) will result in an error.
+### Template (Combine Multiple Variables)
+```toml
+# Simple template with single variable
+[API_TOKEN]
+value = "secret-token-123"
+
+[AUTH_HEADER]
+template = "Bearer {{ .API_TOKEN }}"
+refs = ["API_TOKEN"]
+
+# Combine multiple variables
+[DB_USER]
+value = "admin"
+
+[DB_PASS]
+value = "secret"
+
+[DB_HOST]
+value = "localhost"
+
+[DB_PORT]
+value = "5432"
+
+[DB_NAME]
+value = "myapp"
+
+[DATABASE_URL]
+template = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:{{ .DB_PORT }}/{{ .DB_NAME }}"
+refs = ["DB_USER", "DB_PASS", "DB_HOST", "DB_PORT", "DB_NAME"]
+
+# Conditional template
+[USE_STAGING]
+value = "true"
+
+[API_ENDPOINT]
+template = "{{ if .USE_STAGING }}https://staging.api.example.com{{ else }}https://api.example.com{{ end }}"
+refs = ["USE_STAGING"]
+
+# Template can reference aliases and system environment variables
+[LOG_PATH]
+template = "{{ .HOME }}/logs/{{ .APP_NAME }}.log"
+refs = ["HOME", "APP_NAME"]
+```
+
+**Note**: 
+- Only one of `value`, `file`, `command`, `alias`, or `template` can be specified per variable
+- Templates use Go's `text/template` syntax
+- The `refs` field is required when using `template` and must list all variables referenced in the template
+- Circular references (e.g., A→B→A) will result in an error
 
 ## Migration from v1 to v2
 
