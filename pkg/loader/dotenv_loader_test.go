@@ -70,7 +70,7 @@ VALID_KEY=valid_value`
 		// Test loader
 		loadFunc := loader.NewDotEnvLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
-		
+
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("invalid format")
 	})
@@ -95,7 +95,7 @@ KEY2=value2
 		// Test loader
 		loadFunc := loader.NewDotEnvLoader(tmpFile.Name())
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
-		
+
 		gt.Equal(t, len(envVars), 2)
 	})
 }

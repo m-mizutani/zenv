@@ -15,7 +15,7 @@ func TestTOMLLoader(t *testing.T) {
 	t.Run("Load valid TOML file with static values", func(t *testing.T) {
 		loadFunc := loader.NewTOMLLoader("testdata/valid.toml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
-		
+
 		gt.Equal(t, len(envVars), 3)
 
 		// Verify values
@@ -36,7 +36,7 @@ func TestTOMLLoader(t *testing.T) {
 	t.Run("Load TOML file with file reference", func(t *testing.T) {
 		loadFunc := loader.NewTOMLLoader("testdata/with_file.toml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
-		
+
 		gt.Equal(t, len(envVars), 1)
 		gt.Equal(t, envVars[0].Name, "CONFIG_DATA")
 		gt.Equal(t, envVars[0].Value, "config file content")
@@ -46,7 +46,7 @@ func TestTOMLLoader(t *testing.T) {
 	t.Run("Load TOML file with command execution", func(t *testing.T) {
 		loadFunc := loader.NewTOMLLoader("testdata/with_command.toml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
-		
+
 		gt.Equal(t, len(envVars), 1)
 		gt.Equal(t, envVars[0].Name, "HOSTNAME")
 		gt.Equal(t, envVars[0].Value, "test-host")
@@ -206,7 +206,7 @@ alias = "EMPTY_SYSTEM_VAR"
 		loadFunc := loader.NewTOMLLoader("testdata/circular_alias.toml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("circular alias reference")
+		gt.S(t, err.Error()).Contains("circular reference")
 	})
 
 	t.Run("Validation error when multiple types including alias", func(t *testing.T) {
@@ -333,7 +333,7 @@ refs = ["TEST_SYS_VAR"]
 		loadFunc := loader.NewTOMLLoader("testdata/template_circular.toml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("circular template reference")
+		gt.S(t, err.Error()).Contains("circular reference")
 	})
 
 	t.Run("Template syntax error", func(t *testing.T) {
@@ -408,5 +408,80 @@ refs = ["OTHER"]
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("multiple value types specified")
+	})
+
+	t.Run("Alias pointing to template variable", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/alias_to_template.toml")
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		vars := make(map[string]string)
+		for _, envVar := range envVars {
+			vars[envVar.Name] = envVar.Value
+		}
+
+		// TEMPLATE_VAR should resolve to "hello world"
+		gt.Equal(t, vars["TEMPLATE_VAR"], "hello world")
+
+		// ALIAS_TO_TEMPLATE should also resolve to "hello world"
+		gt.Equal(t, vars["ALIAS_TO_TEMPLATE"], "hello world")
+
+		// ALIAS_TO_ALIAS should also resolve to "hello world"
+		gt.Equal(t, vars["ALIAS_TO_ALIAS"], "hello world")
+	})
+
+	t.Run("Handle complex circular references (alias->template->alias)", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/complex_circular.toml")
+		_, err := loadFunc(context.Background())
+		
+		// Should detect circular reference in any of the complex cases
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("circular reference")
+	})
+
+	t.Run("Circular reference via alias and template mix", func(t *testing.T) {
+		// Create a specific test case: A->B(template)->C->A
+		tomlContent := `
+[VAR_A]
+alias = "VAR_B"
+
+[VAR_B]
+template = "B uses {{ .VAR_C }}"
+refs = ["VAR_C"]
+
+[VAR_C]
+alias = "VAR_A"
+`
+		tmpFile := gt.R1(os.CreateTemp("", "test_circular_mix*.toml")).NoError(t)
+		defer os.Remove(tmpFile.Name())
+		gt.R1(tmpFile.WriteString(tomlContent)).NoError(t)
+		tmpFile.Close()
+
+		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
+		_, err := loadFunc(context.Background())
+		
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("circular reference")
+	})
+
+	t.Run("Template self-reference through alias", func(t *testing.T) {
+		// Create a test where template references itself through an alias
+		tomlContent := `
+[SELF_TEMPLATE]
+template = "Self: {{ .SELF_ALIAS }}"
+refs = ["SELF_ALIAS"]
+
+[SELF_ALIAS]
+alias = "SELF_TEMPLATE"
+`
+		tmpFile := gt.R1(os.CreateTemp("", "test_self_ref_mix*.toml")).NoError(t)
+		defer os.Remove(tmpFile.Name())
+		gt.R1(tmpFile.WriteString(tomlContent)).NoError(t)
+		tmpFile.Close()
+
+		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
+		_, err := loadFunc(context.Background())
+		
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("circular reference")
 	})
 }
