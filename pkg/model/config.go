@@ -46,9 +46,9 @@ func (v TOMLValue) Validate() error {
 		return goerr.New("multiple value types specified (only one of value, file, command, alias, or template can be specified)")
 	}
 
-	// Template requires refs to be specified
-	if v.Template != nil && len(v.Refs) == 0 {
-		return goerr.New("template requires refs to be specified")
+	// Refs can only be used with templates
+	if len(v.Refs) > 0 && v.Template == nil {
+		return goerr.New("refs can only be used with template")
 	}
 
 	return nil

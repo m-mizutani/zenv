@@ -358,10 +358,10 @@ value = "test"
 	})
 
 	t.Run("Template without refs field", func(t *testing.T) {
-		// Create a TOML file with template but no refs
+		// Create a TOML file with template but no refs (should work)
 		tomlContent := `
 [NO_REFS]
-template = "This should fail"
+template = "Static template text"
 `
 		tmpFile := gt.R1(os.CreateTemp("", "test_template_norefs*.toml")).NoError(t)
 		defer os.Remove(tmpFile.Name())
@@ -369,9 +369,11 @@ template = "This should fail"
 		tmpFile.Close()
 
 		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
-		_, err := loadFunc(context.Background())
-		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("template requires refs")
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+		
+		gt.Equal(t, len(envVars), 1)
+		gt.Equal(t, envVars[0].Name, "NO_REFS")
+		gt.Equal(t, envVars[0].Value, "Static template text")
 	})
 
 	t.Run("Refs without template field", func(t *testing.T) {
@@ -410,7 +412,34 @@ refs = ["OTHER"]
 		gt.S(t, err.Error()).Contains("multiple value types specified")
 	})
 
-	t.Run("Alias pointing to template variable", func(t *testing.T) {
+	t.Run("Template referenced by an alias", func(t *testing.T) {
+		tomlContent := `
+[TEMPLATE_VAR]
+template = "hello world"
+refs = []
+
+[ALIAS_VAR]
+alias = "TEMPLATE_VAR"
+`
+		tmpFile := gt.R1(os.CreateTemp("", "test_template_alias*.toml")).NoError(t)
+		defer os.Remove(tmpFile.Name())
+		gt.R1(tmpFile.WriteString(tomlContent)).NoError(t)
+		tmpFile.Close()
+
+		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		vars := make(map[string]string)
+		for _, envVar := range envVars {
+			vars[envVar.Name] = envVar.Value
+		}
+
+		// Both TEMPLATE_VAR and ALIAS_VAR should resolve to "hello world"
+		gt.Equal(t, vars["TEMPLATE_VAR"], "hello world")
+		gt.Equal(t, vars["ALIAS_VAR"], "hello world")
+	})
+
+	t.Run("Alias pointing to template variable with refs", func(t *testing.T) {
 		loadFunc := loader.NewTOMLLoader("testdata/alias_to_template.toml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
