@@ -9,3 +9,8 @@ require (
 	github.com/m-mizutani/goerr/v2 v2.0.0-beta.4
 	github.com/urfave/cli/v3 v3.4.1
 )
+
+require (
+	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/m-mizutani/gt v0.1.0 // indirect
+)

@@ -1,10 +1,12 @@
 package loader
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"os/exec"
 	"strings"
+	"text/template"
 
 	"github.com/BurntSushi/toml"
 	"github.com/m-mizutani/goerr/v2"
@@ -24,15 +26,16 @@ func NewTOMLLoader(path string) LoadFunc {
 
 		var envVars []*model.EnvVar
 		aliasResolver := newAliasResolver(config)
+		templateResolver := newTemplateResolver(config)
 
-		// First, collect all non-alias values
+		// First, collect all non-alias and non-template values
 		for key, value := range config {
 			if err := value.Validate(); err != nil {
 				return nil, goerr.Wrap(err, "invalid configuration", goerr.V("key", key))
 			}
 
-			if value.Alias != nil {
-				// Skip alias values for now, will process them later
+			if value.Alias != nil || value.Template != nil {
+				// Skip alias and template values for now, will process them later
 				continue
 			}
 
@@ -66,6 +69,7 @@ func NewTOMLLoader(path string) LoadFunc {
 			}
 			envVars = append(envVars, envVar)
 			aliasResolver.addResolvedVar(key, envValue)
+			templateResolver.addResolvedVar(key, envValue)
 		}
 
 		// Then, resolve all alias values
@@ -79,6 +83,29 @@ func NewTOMLLoader(path string) LoadFunc {
 				return nil, goerr.Wrap(err, "failed to resolve alias",
 					goerr.V("key", key),
 					goerr.V("alias", *value.Alias))
+			}
+
+			envVar := &model.EnvVar{
+				Name:   key,
+				Value:  resolvedValue,
+				Source: model.SourceTOML,
+			}
+			envVars = append(envVars, envVar)
+			templateResolver.addResolvedVar(key, resolvedValue)
+		}
+
+		// Finally, resolve all template values
+		for key, value := range config {
+			if value.Template == nil {
+				continue
+			}
+
+			resolvedValue, err := templateResolver.resolve(*value.Template, value.Refs, key)
+			if err != nil {
+				return nil, goerr.Wrap(err, "failed to resolve template",
+					goerr.V("key", key),
+					goerr.V("template", *value.Template),
+					goerr.V("refs", value.Refs))
 			}
 
 			envVar := &model.EnvVar{
@@ -164,5 +191,110 @@ func (r *aliasResolver) resolveWithVisited(aliasTarget string, visited map[strin
 	}
 
 	// If not found anywhere, return empty string
+	return "", nil
+}
+
+// templateResolver handles template resolution with circular reference detection
+type templateResolver struct {
+	config       model.TOMLConfig
+	resolvedVars map[string]string
+	systemEnvs   map[string]string // Cache system environment variables
+}
+
+func newTemplateResolver(config model.TOMLConfig) *templateResolver {
+	// Cache system environment variables
+	systemEnvs := make(map[string]string)
+	for _, env := range os.Environ() {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			systemEnvs[parts[0]] = parts[1]
+		}
+	}
+
+	return &templateResolver{
+		config:       config,
+		resolvedVars: make(map[string]string),
+		systemEnvs:   systemEnvs,
+	}
+}
+
+func (r *templateResolver) addResolvedVar(key string, value string) {
+	r.resolvedVars[key] = value
+}
+
+func (r *templateResolver) resolve(templateStr string, refs []string, currentKey string) (string, error) {
+	return r.resolveWithVisited(templateStr, refs, currentKey, make(map[string]bool))
+}
+
+func (r *templateResolver) resolveWithVisited(templateStr string, refs []string, currentKey string, visited map[string]bool) (string, error) {
+	// Check for circular reference
+	if visited[currentKey] {
+		return "", goerr.New("circular template reference detected",
+			goerr.V("key", currentKey),
+			goerr.V("visited", visited))
+	}
+	visited[currentKey] = true
+
+	// Build the context for the template
+	context := make(map[string]string)
+
+	for _, ref := range refs {
+		value, err := r.resolveRef(ref, visited)
+		if err != nil {
+			return "", goerr.Wrap(err, "failed to resolve reference",
+				goerr.V("ref", ref),
+				goerr.V("key", currentKey))
+		}
+		context[ref] = value
+	}
+
+	// Parse and execute the template
+	tmpl, err := template.New("env").Parse(templateStr)
+	if err != nil {
+		return "", goerr.Wrap(err, "failed to parse template",
+			goerr.V("template", templateStr),
+			goerr.V("key", currentKey))
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, context); err != nil {
+		return "", goerr.Wrap(err, "failed to execute template",
+			goerr.V("template", templateStr),
+			goerr.V("key", currentKey),
+			goerr.V("context", context))
+	}
+
+	return buf.String(), nil
+}
+
+func (r *templateResolver) resolveRef(ref string, visited map[string]bool) (string, error) {
+	// Check for circular reference
+	if visited[ref] {
+		return "", goerr.New("circular template reference detected",
+			goerr.V("ref", ref),
+			goerr.V("visited", visited))
+	}
+
+	// First, check if it's already resolved from TOML config
+	if value, exists := r.resolvedVars[ref]; exists {
+		return value, nil
+	}
+
+	// Check if the ref exists in config and needs resolution
+	if refConfig, exists := r.config[ref]; exists {
+		if refConfig.Template != nil {
+			// Use resolveWithVisited to properly track circular references
+			return r.resolveWithVisited(*refConfig.Template, refConfig.Refs, ref, visited)
+		}
+		// If it's not a template but exists in config, it should have been resolved already
+		// This shouldn't happen in normal flow
+	}
+
+	// If not found in TOML, check system environment variables
+	if value, exists := r.systemEnvs[ref]; exists {
+		return value, nil
+	}
+
+	// If not found anywhere, return empty string (not an error)
 	return "", nil
 }
