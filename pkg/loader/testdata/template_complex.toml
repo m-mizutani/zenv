@@ -13,10 +13,8 @@ refs = ["EMPTY_VAR"]
 template = "Path: {{ .PATH }}"
 refs = ["PATH"]
 
-# Template with non-existent reference
-[MISSING_REF_TEMPLATE]
-template = "Missing: [{{ .NON_EXISTENT }}]"
-refs = ["NON_EXISTENT"]
+# Template with non-existent reference - this variable was removed
+# as it now causes an error instead of returning empty string
 
 # Template with range iteration
 [ITEM_1]

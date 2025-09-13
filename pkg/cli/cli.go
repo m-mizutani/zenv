@@ -5,9 +5,11 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/m-mizutani/clog"
 	"github.com/m-mizutani/ctxlog"
+	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/zenv/v2/pkg/executor"
 	"github.com/m-mizutani/zenv/v2/pkg/loader"
 	"github.com/m-mizutani/zenv/v2/pkg/model"
@@ -118,27 +120,59 @@ func Run(ctx context.Context, args []string) error {
 			// Set logger in context for propagation
 			ctx = ctxlog.With(ctx, logger)
 
-			var loaders []loader.LoadFunc
+			// Collect environment variables in order for TOML loader reference
+			var allExistingVars []*model.EnvVar
 
-			// Add .env files specified by -e option
+			// First, collect system environment variables
+			for _, env := range os.Environ() {
+				parts := strings.SplitN(env, "=", 2)
+				if len(parts) == 2 {
+					allExistingVars = append(allExistingVars, &model.EnvVar{
+						Name:   parts[0],
+						Value:  parts[1],
+						Source: model.SourceSystem,
+					})
+				}
+			}
+
+			// Load .env files once and collect their variables
+			var envLoaders []loader.LoadFunc
 			for _, envFile := range envFiles {
-				loaders = append(loaders, loader.NewDotEnvLoader(envFile))
+				envLoaders = append(envLoaders, loader.NewDotEnvLoader(envFile))
 			}
-
-			// Add default .env file if no -e option specified
 			if len(envFiles) == 0 {
-				loaders = append(loaders, loader.NewDotEnvLoader(".env"))
+				envLoaders = append(envLoaders, loader.NewDotEnvLoader(".env"))
 			}
 
-			// Add .toml files specified by -t option
+			// Execute .env loaders once and collect results
+			var loadedDotEnvVars []*model.EnvVar
+			for _, loadFunc := range envLoaders {
+				envVars, err := loadFunc(ctx)
+				if err != nil {
+					return goerr.Wrap(err, "failed to load .env file")
+				}
+				if envVars != nil {
+					loadedDotEnvVars = append(loadedDotEnvVars, envVars...)
+				}
+			}
+			allExistingVars = append(allExistingVars, loadedDotEnvVars...)
+
+			// Now create TOML loaders with all existing variables
+			var tomlLoaders []loader.LoadFunc
 			for _, tomlFile := range tomlFiles {
-				loaders = append(loaders, loader.NewTOMLLoader(tomlFile))
+				tomlLoaders = append(tomlLoaders, loader.NewTOMLLoader(tomlFile, allExistingVars))
+			}
+			if len(tomlFiles) == 0 {
+				tomlLoaders = append(tomlLoaders, loader.NewTOMLLoader(".env.toml", allExistingVars))
 			}
 
-			// Add default .env.toml file if no -t option specified
-			if len(tomlFiles) == 0 {
-				loaders = append(loaders, loader.NewTOMLLoader(".env.toml"))
-			}
+			// Combine all loaders for the usecase
+			var loaders []loader.LoadFunc
+			// Use an in-memory loader for .env vars to avoid reading files twice
+			loaders = append(loaders, func(ctx context.Context) ([]*model.EnvVar, error) {
+				return loadedDotEnvVars, nil
+			})
+			loaders = append(loaders, tomlLoaders...)
 
 			// Create executor and usecase
 			exec := executor.NewDefaultExecutor()
