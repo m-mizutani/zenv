@@ -90,23 +90,23 @@ type unifiedResolver struct {
 	config       model.TOMLConfig
 	resolvedVars map[string]string
 	resolving    map[string]bool // Track variables currently being resolved
-	systemEnvs   map[string]string
-	externalVars map[string]string // Variables from .env files and other sources
+	externalVars map[string]string // Variables from .env files, system environment, and other sources
 }
 
 
 func newUnifiedResolverWithVars(config model.TOMLConfig, existingVars []*model.EnvVar) *unifiedResolver {
-	// Cache system environment variables
-	systemEnvs := make(map[string]string)
+	// Cache all external variables (system environment + .env files, etc.)
+	externalVars := make(map[string]string)
+	
+	// First add system environment variables
 	for _, env := range os.Environ() {
 		parts := strings.SplitN(env, "=", 2)
 		if len(parts) == 2 {
-			systemEnvs[parts[0]] = parts[1]
+			externalVars[parts[0]] = parts[1]
 		}
 	}
 
-	// Cache external variables (from .env files, etc.)
-	externalVars := make(map[string]string)
+	// Then add existing variables (from .env files, etc.) - these can override system vars
 	for _, envVar := range existingVars {
 		if envVar != nil {
 			externalVars[envVar.Name] = envVar.Value
@@ -117,7 +117,6 @@ func newUnifiedResolverWithVars(config model.TOMLConfig, existingVars []*model.E
 		config:       config,
 		resolvedVars: make(map[string]string),
 		resolving:    make(map[string]bool),
-		systemEnvs:   systemEnvs,
 		externalVars: externalVars,
 	}
 }
@@ -141,13 +140,8 @@ func (r *unifiedResolver) resolve(key string) (string, error) {
 	// Get the configuration for this key
 	config, exists := r.config[key]
 	if !exists {
-		// Not in TOML config, check external variables first (higher priority)
+		// Not in TOML config, check external variables (which includes system vars)
 		if value, exists := r.externalVars[key]; exists {
-			r.resolvedVars[key] = value
-			return value, nil
-		}
-		// Then check system environment
-		if value, exists := r.systemEnvs[key]; exists {
 			r.resolvedVars[key] = value
 			return value, nil
 		}
