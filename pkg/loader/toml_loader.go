@@ -14,7 +14,7 @@ import (
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
-func NewTOMLLoader(path string) LoadFunc {
+func NewTOMLLoader(path string, existingVars ...[]*model.EnvVar) LoadFunc {
 	return func(ctx context.Context) ([]*model.EnvVar, error) {
 		logger := ctxlog.From(ctx)
 		logger.Debug("loading TOML file", "path", path)
@@ -30,8 +30,14 @@ func NewTOMLLoader(path string) LoadFunc {
 			return nil, goerr.Wrap(err, "failed to parse TOML file", goerr.V("path", path))
 		}
 
-		// Create unified resolver
-		resolver := newUnifiedResolver(config)
+		// Merge existing variables if provided
+		var allExistingVars []*model.EnvVar
+		for _, vars := range existingVars {
+			allExistingVars = append(allExistingVars, vars...)
+		}
+
+		// Create unified resolver with existing variables
+		resolver := newUnifiedResolverWithVars(config, allExistingVars)
 
 		// Resolve all variables
 		var envVars []*model.EnvVar
@@ -84,16 +90,26 @@ type unifiedResolver struct {
 	config       model.TOMLConfig
 	resolvedVars map[string]string
 	resolving    map[string]bool // Track variables currently being resolved
-	systemEnvs   map[string]string
+	externalVars map[string]string // Variables from .env files, system environment, and other sources
 }
 
-func newUnifiedResolver(config model.TOMLConfig) *unifiedResolver {
-	// Cache system environment variables
-	systemEnvs := make(map[string]string)
+
+func newUnifiedResolverWithVars(config model.TOMLConfig, existingVars []*model.EnvVar) *unifiedResolver {
+	// Cache all external variables (system environment + .env files, etc.)
+	externalVars := make(map[string]string)
+	
+	// First add system environment variables
 	for _, env := range os.Environ() {
 		parts := strings.SplitN(env, "=", 2)
 		if len(parts) == 2 {
-			systemEnvs[parts[0]] = parts[1]
+			externalVars[parts[0]] = parts[1]
+		}
+	}
+
+	// Then add existing variables (from .env files, etc.) - these can override system vars
+	for _, envVar := range existingVars {
+		if envVar != nil {
+			externalVars[envVar.Name] = envVar.Value
 		}
 	}
 
@@ -101,7 +117,7 @@ func newUnifiedResolver(config model.TOMLConfig) *unifiedResolver {
 		config:       config,
 		resolvedVars: make(map[string]string),
 		resolving:    make(map[string]bool),
-		systemEnvs:   systemEnvs,
+		externalVars: externalVars,
 	}
 }
 
@@ -124,13 +140,14 @@ func (r *unifiedResolver) resolve(key string) (string, error) {
 	// Get the configuration for this key
 	config, exists := r.config[key]
 	if !exists {
-		// Not in TOML config, check system environment
-		if value, exists := r.systemEnvs[key]; exists {
+		// Not in TOML config, check external variables (which includes system vars)
+		if value, exists := r.externalVars[key]; exists {
 			r.resolvedVars[key] = value
 			return value, nil
 		}
-		// Not found anywhere
-		return "", nil
+		// Not found anywhere - return error for missing variable
+		return "", goerr.New("variable not found",
+			goerr.V("key", key))
 	}
 
 	// Resolve based on type

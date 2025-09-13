@@ -3,6 +3,7 @@ package loader_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/m-mizutani/gt"
@@ -186,20 +187,11 @@ alias = "EMPTY_SYSTEM_VAR"
 		gt.Equal(t, aliasValue, "")
 	})
 
-	t.Run("Alias with non-existent target returns empty string", func(t *testing.T) {
+	t.Run("Alias with non-existent target returns error", func(t *testing.T) {
 		loadFunc := loader.NewTOMLLoader("testdata/alias_missing.toml")
-		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
-
-		// Find the MISSING_ALIAS environment variable
-		var missingValue string
-		for _, envVar := range envVars {
-			if envVar.Name == "MISSING_ALIAS" {
-				missingValue = envVar.Value
-				break
-			}
-		}
-
-		gt.Equal(t, missingValue, "")
+		_, err := loadFunc(context.Background())
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("variable not found")
 	})
 
 	t.Run("Handle circular alias reference", func(t *testing.T) {
@@ -293,8 +285,9 @@ refs = ["TEST_SYS_VAR"]
 		// WITH_EMPTY should have empty brackets
 		gt.Equal(t, vars["WITH_EMPTY"], "Value: []")
 
-		// MISSING_REF_TEMPLATE should have empty brackets for non-existent ref
-		gt.Equal(t, vars["MISSING_REF_TEMPLATE"], "Missing: []")
+		// MISSING_REF_TEMPLATE should not exist anymore (removed from template_complex.toml)
+		_, exists := vars["MISSING_REF_TEMPLATE"]
+		gt.False(t, exists)
 	})
 
 	t.Run("Template with nested references", func(t *testing.T) {
@@ -512,5 +505,255 @@ alias = "SELF_TEMPLATE"
 
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("circular reference")
+	})
+
+	// Cross-reference tests: TOML can reference .env and system variables
+	t.Run("Template can reference .env variables", func(t *testing.T) {
+		// Create temporary TOML file with template
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "test.toml")
+		tomlContent := `
+[DB_URL]
+template = "postgres://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:5432/mydb"
+refs = ["DB_USER", "DB_PASS", "DB_HOST"]
+`
+		gt.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
+
+		// Create existing variables (as if from .env file)
+		existingVars := []*model.EnvVar{
+			{Name: "DB_USER", Value: "admin", Source: model.SourceDotEnv},
+			{Name: "DB_PASS", Value: "secret123", Source: model.SourceDotEnv},
+			{Name: "DB_HOST", Value: "localhost", Source: model.SourceDotEnv},
+		}
+
+		// Create TOML loader with existing variables
+		loader := loader.NewTOMLLoader(tomlPath, existingVars)
+
+		// Load and resolve
+		vars, err := loader(context.Background())
+		gt.NoError(t, err)
+		gt.Equal(t, len(vars), 1)
+		gt.Equal(t, vars[0].Name, "DB_URL")
+		gt.Equal(t, vars[0].Value, "postgres://admin:secret123@localhost:5432/mydb")
+	})
+
+	t.Run("Alias can reference .env variables", func(t *testing.T) {
+		// Create temporary TOML file with alias
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "test.toml")
+		tomlContent := `
+[PRIMARY_DB]
+alias = "DATABASE_URL"
+`
+		gt.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
+
+		// Create existing variables
+		existingVars := []*model.EnvVar{
+			{Name: "DATABASE_URL", Value: "postgres://localhost/myapp", Source: model.SourceDotEnv},
+		}
+
+		// Create TOML loader with existing variables
+		loader := loader.NewTOMLLoader(tomlPath, existingVars)
+
+		// Load and resolve
+		vars, err := loader(context.Background())
+		gt.NoError(t, err)
+		gt.Equal(t, len(vars), 1)
+		gt.Equal(t, vars[0].Name, "PRIMARY_DB")
+		gt.Equal(t, vars[0].Value, "postgres://localhost/myapp")
+	})
+
+	t.Run("Cross-reference priority: TOML > .env > system", func(t *testing.T) {
+		// Set system environment variable
+		os.Setenv("PRIORITY_VAR", "system_value")
+		defer os.Unsetenv("PRIORITY_VAR")
+
+		// Create temporary TOML file
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "test.toml")
+		tomlContent := `
+[PRIORITY_VAR]
+value = "toml_value"
+
+[RESULT]
+template = "Value is: {{ .PRIORITY_VAR }}"
+refs = ["PRIORITY_VAR"]
+`
+		gt.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
+
+		// Create existing variables from .env
+		existingVars := []*model.EnvVar{
+			{Name: "PRIORITY_VAR", Value: "env_value", Source: model.SourceDotEnv},
+		}
+
+		// Create TOML loader with existing variables
+		loader := loader.NewTOMLLoader(tomlPath, existingVars)
+
+		// Load and resolve
+		vars, err := loader(context.Background())
+		gt.NoError(t, err)
+
+		// Find RESULT variable
+		var resultVar *model.EnvVar
+		for _, v := range vars {
+			if v.Name == "RESULT" {
+				resultVar = v
+				break
+			}
+		}
+
+		gt.NotNil(t, resultVar)
+		// TOML value should take priority
+		gt.Equal(t, resultVar.Value, "Value is: toml_value")
+	})
+
+	t.Run("Complex template with mixed sources", func(t *testing.T) {
+		// Set system environment variable
+		os.Setenv("SYS_HOST", "prod.example.com")
+		defer os.Unsetenv("SYS_HOST")
+
+		// Create temporary TOML file
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "test.toml")
+		tomlContent := `
+[APP_NAME]
+value = "myapp"
+
+[PORT]
+value = "8080"
+
+[FULL_URL]
+template = "https://{{ .ENV_USER }}@{{ .SYS_HOST }}:{{ .PORT }}/{{ .APP_NAME }}"
+refs = ["ENV_USER", "SYS_HOST", "PORT", "APP_NAME"]
+`
+		gt.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
+
+		// Create existing variables from .env
+		existingVars := []*model.EnvVar{
+			{Name: "ENV_USER", Value: "alice", Source: model.SourceDotEnv},
+		}
+
+		// Create TOML loader with existing variables
+		loader := loader.NewTOMLLoader(tomlPath, existingVars)
+
+		// Load and resolve
+		vars, err := loader(context.Background())
+		gt.NoError(t, err)
+
+		// Find FULL_URL variable
+		var fullURLVar *model.EnvVar
+		for _, v := range vars {
+			if v.Name == "FULL_URL" {
+				fullURLVar = v
+				break
+			}
+		}
+
+		gt.NotNil(t, fullURLVar)
+		gt.Equal(t, fullURLVar.Value, "https://alice@prod.example.com:8080/myapp")
+	})
+
+	t.Run("TOML loader backward compatibility", func(t *testing.T) {
+		// Create temporary TOML file
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "test.toml")
+		tomlContent := `
+[SIMPLE_VAR]
+value = "simple_value"
+`
+		gt.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
+
+		// Create TOML loader without external variables (backward compatibility)
+		loader := loader.NewTOMLLoader(tomlPath)
+
+		// Load and resolve
+		vars, err := loader(context.Background())
+		gt.NoError(t, err)
+		gt.Equal(t, len(vars), 1)
+		gt.Equal(t, vars[0].Name, "SIMPLE_VAR")
+		gt.Equal(t, vars[0].Value, "simple_value")
+	})
+
+	t.Run("Error on missing variable in template", func(t *testing.T) {
+		// Create temporary TOML file with template referencing missing variable
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "test.toml")
+		tomlContent := `
+[TEST_TEMPLATE]
+template = "prefix {{ .MISSING_VAR }} suffix"
+refs = ["MISSING_VAR"]
+`
+		gt.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
+
+		// Create TOML loader
+		loader := loader.NewTOMLLoader(tomlPath)
+
+		// Load and resolve - should error
+		_, err := loader(context.Background())
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("variable not found")
+	})
+
+	t.Run("Error on missing variable in alias", func(t *testing.T) {
+		// Create temporary TOML file with alias referencing missing variable
+		tmpDir := t.TempDir()
+		tomlPath := filepath.Join(tmpDir, "test.toml")
+		tomlContent := `
+[TEST_ALIAS]
+alias = "MISSING_VAR"
+`
+		gt.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
+
+		// Create TOML loader
+		loader := loader.NewTOMLLoader(tomlPath)
+
+		// Load and resolve - should error
+		_, err := loader(context.Background())
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("variable not found")
+	})
+
+	t.Run("Empty string vs missing variable distinction", func(t *testing.T) {
+		// Test 1: Empty string variable should work (no error)
+		tmpDir := t.TempDir()
+		tomlPath1 := filepath.Join(tmpDir, "empty.toml")
+		tomlContent1 := `
+[TEST_EMPTY]
+template = "prefix {{ .EMPTY_VAR }} suffix"
+refs = ["EMPTY_VAR"]
+`
+		gt.NoError(t, os.WriteFile(tomlPath1, []byte(tomlContent1), 0644))
+
+		// Create existing variables with empty string
+		existingVars := []*model.EnvVar{
+			{Name: "EMPTY_VAR", Value: "", Source: model.SourceDotEnv},
+		}
+
+		// Create TOML loader with empty variable
+		loader1 := loader.NewTOMLLoader(tomlPath1, existingVars)
+
+		// Load and resolve - should succeed with empty string
+		vars, err := loader1(context.Background())
+		gt.NoError(t, err)
+		gt.Equal(t, len(vars), 1)
+		gt.Equal(t, vars[0].Name, "TEST_EMPTY")
+		gt.Equal(t, vars[0].Value, "prefix  suffix") // Empty variable creates empty space
+
+		// Test 2: Missing variable should error
+		tomlPath2 := filepath.Join(tmpDir, "missing.toml")
+		tomlContent2 := `
+[TEST_MISSING]
+template = "prefix {{ .MISSING_VAR }} suffix"
+refs = ["MISSING_VAR"]
+`
+		gt.NoError(t, os.WriteFile(tomlPath2, []byte(tomlContent2), 0644))
+
+		// Create TOML loader without the required variable
+		loader2 := loader.NewTOMLLoader(tomlPath2, existingVars) // MISSING_VAR not in existingVars
+
+		// Load and resolve - should error
+		_, err = loader2(context.Background())
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("variable not found")
 	})
 }
