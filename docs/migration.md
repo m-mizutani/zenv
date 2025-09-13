@@ -233,6 +233,12 @@ alias = "DATABASE_URL"
 # v1: DATABASE_URL=postgresql://%DB_USER%:%DB_PASS%@%DB_HOST%:%DB_PORT%/%DB_NAME%
 # v2: Use template with Go template syntax
 
+# Templates can reference:
+# 1. Variables defined in the same TOML file
+# 2. Variables from .env files loaded before the TOML
+# 3. System environment variables
+# Priority: TOML > .env > System
+
 [DB_USER]
 value = "admin"
 
@@ -264,6 +270,13 @@ refs = ["USE_STAGING"]
 [LOG_PATH]
 template = "{{ .HOME }}/logs/{{ .APP_NAME }}.log"
 refs = ["HOME", "APP_NAME"]
+
+# Reference variables from .env files
+# If .env contains: DB_USER=alice, DB_HOST=prod.example.com
+# This template can use them:
+[PROD_DB_URL]
+template = "postgresql://{{ .DB_USER }}@{{ .DB_HOST }}:5432/{{ .DB_NAME }}"
+refs = ["DB_USER", "DB_HOST", "DB_NAME"]  # DB_USER, DB_HOST from .env, DB_NAME from TOML
 ```
 
 ### 2. Multiple File Support
