@@ -135,7 +135,7 @@ func Run(ctx context.Context, args []string) error {
 				}
 			}
 
-			// Load .env files first and collect their variables
+			// Load .env files once and collect their variables
 			var envLoaders []loader.LoadFunc
 			for _, envFile := range envFiles {
 				envLoaders = append(envLoaders, loader.NewDotEnvLoader(envFile))
@@ -144,16 +144,18 @@ func Run(ctx context.Context, args []string) error {
 				envLoaders = append(envLoaders, loader.NewDotEnvLoader(".env"))
 			}
 
-			// Execute .env loaders and collect results
+			// Execute .env loaders once and collect results
+			var loadedDotEnvVars []*model.EnvVar
 			for _, loadFunc := range envLoaders {
 				envVars, err := loadFunc(ctx)
 				if err != nil {
 					return goerr.Wrap(err, "failed to load .env file")
 				}
 				if envVars != nil {
-					allExistingVars = append(allExistingVars, envVars...)
+					loadedDotEnvVars = append(loadedDotEnvVars, envVars...)
 				}
 			}
+			allExistingVars = append(allExistingVars, loadedDotEnvVars...)
 
 			// Now create TOML loaders with all existing variables
 			var tomlLoaders []loader.LoadFunc
@@ -166,7 +168,10 @@ func Run(ctx context.Context, args []string) error {
 
 			// Combine all loaders for the usecase
 			var loaders []loader.LoadFunc
-			loaders = append(loaders, envLoaders...)
+			// Use an in-memory loader for .env vars to avoid reading files twice
+			loaders = append(loaders, func(ctx context.Context) ([]*model.EnvVar, error) {
+				return loadedDotEnvVars, nil
+			})
 			loaders = append(loaders, tomlLoaders...)
 
 			// Create executor and usecase
