@@ -8,12 +8,10 @@ Before migrating, understand that v2 **removes** several v1 features:
 
 | Feature | v1 | v2 | Migration Path |
 |---------|----|----|----------------|
-| **macOS Keychain Integration** | ✅ Full support | ❌ **Removed** | Use external tools or TOML file references |
-| **Secret Management Commands** | ✅ `secret write/read/list` | ❌ **Removed** | Manual secret management |
-| **Variable Replacement (`%` prefix)** | ✅ `%MYTOOL_DB_PASSWD` | ❌ **Removed** | Use shell variable expansion |
+| **Secret Management (Keychain)** | ✅ Full support (`secret write/read/list`, `@namespace`) | ❌ **Removed** | Use external tools or TOML file references |
+| **Variable Replacement (`%` prefix)** | ✅ `%MYTOOL_DB_PASSWD` | ✅ **Template support** | Migrate to TOML `template` with Go templates |
 | **File Content Loading (`&` prefix)** | ✅ `KEY=&/path/file` | ✅ **Replaced with TOML** | Migrate to TOML `file = "path"` |
 | **Command Execution (backticks)** | ✅ `KEY=`\`command\`` | ✅ **Replaced with TOML** | Migrate to TOML `command/args` |
-| **Namespace-based secrets** | ✅ `@namespace` | ❌ **Removed** | No equivalent |
 
 ## What v2 Focuses On
 
@@ -71,37 +69,41 @@ file = "/path/to/secret.txt"
 command = "gcloud"
 args = ["auth", "print-access-token"]
 
-# DB_PASSWORD=%VAULT_DB_PASS - NO EQUIVALENT in v2
+# Variable replacement is now done with templates
+[DB_PASSWORD]
+template = "{{ .VAULT_DB_PASS }}"
+refs = ["VAULT_DB_PASS"]
 ```
 
 **⚠️ Migration**: 
-- File loading: ✅ Migrate to TOML
-- Command execution: ✅ Migrate to TOML  
-- Variable replacement: ❌ No equivalent - use shell expansion
+- File loading: ✅ Migrate to TOML `file` directive
+- Command execution: ✅ Migrate to TOML `command/args` directives
+- Variable replacement: ✅ Migrate to TOML `template` with Go templates
 
-### Secret Management
+### Secret Management (macOS Keychain)
 
-#### v1 (Full Keychain Integration)
+#### v1 (Full Keychain Integration with Namespaces)
 ```bash
-# Store secrets in macOS Keychain
+# Store secrets in macOS Keychain with namespace organization
 zenv secret write @aws AWS_SECRET_ACCESS_KEY
 zenv secret generate @project API_TOKEN 32
 zenv secret list
 
-# Use in .env
-AWS_SECRET_ACCESS_KEY=%@aws
-API_TOKEN=%@project
+# Use in .env with namespace prefix
+AWS_SECRET_ACCESS_KEY=%@aws.AWS_SECRET_ACCESS_KEY
+API_TOKEN=%@project.API_TOKEN
 ```
 
-#### v2 (No Secret Management)
+#### v2 (No Built-in Secret Management)
 ```bash
-# NO EQUIVALENT - Feature completely removed
+# Feature completely removed - no built-in secret storage
 ```
 
-**❌ Migration**: No path available. Must use:
-- External secret management tools
-- Manual environment variable setting
-- File-based secrets with appropriate permissions
+**❌ Migration**: No direct equivalent. Alternative approaches:
+- External secret management tools (Vault, AWS Secrets Manager, etc.)
+- Environment variable injection from CI/CD systems
+- File-based secrets with appropriate permissions (chmod 600)
+- Continue using v1 for projects requiring Keychain integration
 
 ## Breaking Changes
 
@@ -225,9 +227,12 @@ alias = "PRIMARY_DB"
 alias = "DATABASE_URL"
 ```
 
-#### Template Support (NEW in v2)
+#### Template Support (NEW in v2 - Replaces v1's Variable Replacement)
 ```toml
-# Combine multiple variables using Go templates
+# Template support replaces v1's %VARIABLE syntax with Go templates
+# v1: DATABASE_URL=postgresql://%DB_USER%:%DB_PASS%@%DB_HOST%:%DB_PORT%/%DB_NAME%
+# v2: Use template with Go template syntax
+
 [DB_USER]
 value = "admin"
 
@@ -383,6 +388,7 @@ API_BASE_URL=https://api.myapp.com
 SECRET_KEY=&/etc/myapp/secret.key
 GIT_COMMIT=`git rev-parse HEAD`
 DATABASE_PASSWORD=%VAULT_DATABASE_PASS
+DATABASE_URL=postgresql://%DB_USER%:%DB_PASS%@%DB_HOST%:5432/myapp
 ```
 
 **v2 Migration Options:**
@@ -400,7 +406,15 @@ file = "/etc/myapp/secret.key"
 command = "git"
 args = ["rev-parse", "HEAD"]
 
-# Note: DATABASE_PASSWORD=%VAULT_DATABASE_PASS has no equivalent
+# Variable replacement with template
+[DATABASE_PASSWORD]
+template = "{{ .VAULT_DATABASE_PASS }}"
+refs = ["VAULT_DATABASE_PASS"]
+
+# Complex variable replacement
+[DATABASE_URL]
+template = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:5432/myapp"
+refs = ["DB_USER", "DB_PASS", "DB_HOST"]
 ```
 
 #### Option B: Use shell expansion (alternative)
@@ -567,19 +581,17 @@ Use this decision matrix to determine if v2 is right for you:
 
 ### ✅ **Migrate to v2 if you:**
 - Use only basic .env files with simple KEY=value pairs
-- Want better TOML configuration support
+- Want better TOML configuration support with structured settings
 - Need clear environment variable precedence
-- Prefer configuration files over secret management
-- Don't rely on v1's special syntax (`%`, `&`, backticks)
-- Don't use macOS Keychain integration
+- Can migrate variable replacement (`%VARIABLE`) to Go templates
+- Can migrate file loading (`&` prefix) and command execution (backticks) to TOML
+- Don't require built-in macOS Keychain integration
 
 ### ❌ **Stay with v1 if you:**
-- Heavily use macOS Keychain integration (`@namespace`)
-- Rely on variable replacement (`%VARIABLE`)
-- Use extensive file loading with `&` prefix in .env
-- Have complex secret management workflows
-- Need backwards compatibility with existing scripts
-- Use namespace-based secret organization
+- Heavily use macOS Keychain integration (`@namespace`) for secret management
+- Have extensive secret management workflows with `zenv secret` commands
+- Need backwards compatibility with existing scripts using v1 syntax
+- Cannot migrate to external secret management solutions
 
 ### 🔄 **Consider hybrid approach if you:**
 - Want to test v2 for new projects
@@ -589,12 +601,14 @@ Use this decision matrix to determine if v2 is right for you:
 
 ### Alternative: Stay with v1
 
-v1 continues to be maintained and has more advanced features. If your use case depends on:
-- **Secret management**: v1's Keychain integration is more sophisticated
-- **Dynamic variables**: v1's `%` syntax is more flexible
-- **Complex workflows**: v1 supports more advanced use cases
+v1 continues to be maintained and remains suitable for:
+- **Secret management**: Built-in macOS Keychain integration with namespace support
+- **Legacy projects**: Existing scripts and workflows that depend on v1 syntax
+- **Simple variable replacement**: Quick `%VARIABLE` syntax without template configuration
 
-**There's no requirement to migrate.** Choose the version that best fits your workflow.
+**There's no requirement to migrate.** Choose the version that best fits your workflow:
+- **v1**: For projects requiring built-in secret management and established workflows
+- **v2**: For configuration-driven environments with TOML support and template capabilities
 
 For additional support, see:
 - [v1 Documentation](https://github.com/m-mizutani/zenv/blob/main/README.md) for v1 features
