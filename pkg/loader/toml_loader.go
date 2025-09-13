@@ -89,15 +89,14 @@ func executeCommand(command string, args []string) (string, error) {
 type unifiedResolver struct {
 	config       model.TOMLConfig
 	resolvedVars map[string]string
-	resolving    map[string]bool // Track variables currently being resolved
+	resolving    map[string]bool   // Track variables currently being resolved
 	externalVars map[string]string // Variables from .env files, system environment, and other sources
 }
-
 
 func newUnifiedResolverWithVars(config model.TOMLConfig, existingVars []*model.EnvVar) *unifiedResolver {
 	// Cache all external variables (system environment + .env files, etc.)
 	externalVars := make(map[string]string)
-	
+
 	// First add system environment variables
 	for _, env := range os.Environ() {
 		parts := strings.SplitN(env, "=", 2)
