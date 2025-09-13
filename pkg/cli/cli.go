@@ -14,7 +14,6 @@ import (
 	"github.com/m-mizutani/zenv/v2/pkg/loader"
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 	"github.com/m-mizutani/zenv/v2/pkg/usecase"
-	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 )
 
@@ -85,115 +84,143 @@ func ParseLogLevel(level string) slog.Level {
 }
 
 func Run(ctx context.Context, args []string) error {
-	var envFiles []string
-	var tomlFiles []string
-	var logLevel string
+	// Create parser and configure options
+	parser := NewParser()
 
-	app := &cli.Command{
-		Name:  "zenv",
-		Usage: "Environment variable loader and command executor",
-		Flags: []cli.Flag{
-			&cli.StringSliceFlag{
-				Name:        "env",
-				Aliases:     []string{"e"},
-				Usage:       "Load environment variables from .env file",
-				Destination: &envFiles,
-			},
-			&cli.StringSliceFlag{
-				Name:        "toml",
-				Aliases:     []string{"t"},
-				Usage:       "Load environment variables from .toml file",
-				Destination: &tomlFiles,
-			},
-			&cli.StringFlag{
-				Name:        "log-level",
-				Usage:       "Set log level (debug, info, warn, error)",
-				Value:       "warn",
-				Destination: &logLevel,
-			},
-		},
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			// Create logger based on log-level flag
-			level := ParseLogLevel(logLevel)
-			logger := NewLogger(level, os.Stderr)
-
-			// Set logger in context for propagation
-			ctx = ctxlog.With(ctx, logger)
-
-			// Collect environment variables in order for TOML loader reference
-			var allExistingVars []*model.EnvVar
-
-			// First, collect system environment variables
-			for _, env := range os.Environ() {
-				parts := strings.SplitN(env, "=", 2)
-				if len(parts) == 2 {
-					allExistingVars = append(allExistingVars, &model.EnvVar{
-						Name:   parts[0],
-						Value:  parts[1],
-						Source: model.SourceSystem,
-					})
-				}
-			}
-
-			// Load .env files once and collect their variables
-			var envLoaders []loader.LoadFunc
-			for _, envFile := range envFiles {
-				envLoaders = append(envLoaders, loader.NewDotEnvLoader(envFile))
-			}
-			if len(envFiles) == 0 {
-				envLoaders = append(envLoaders, loader.NewDotEnvLoader(".env"))
-			}
-
-			// Execute .env loaders once and collect results
-			var loadedDotEnvVars []*model.EnvVar
-			for _, loadFunc := range envLoaders {
-				envVars, err := loadFunc(ctx)
-				if err != nil {
-					return goerr.Wrap(err, "failed to load .env file")
-				}
-				if envVars != nil {
-					loadedDotEnvVars = append(loadedDotEnvVars, envVars...)
-				}
-			}
-			allExistingVars = append(allExistingVars, loadedDotEnvVars...)
-
-			// Now create TOML loaders with all existing variables
-			var tomlLoaders []loader.LoadFunc
-			for _, tomlFile := range tomlFiles {
-				tomlLoaders = append(tomlLoaders, loader.NewTOMLLoader(tomlFile, allExistingVars))
-			}
-			if len(tomlFiles) == 0 {
-				tomlLoaders = append(tomlLoaders, loader.NewTOMLLoader(".env.toml", allExistingVars))
-			}
-
-			// Combine all loaders for the usecase
-			var loaders []loader.LoadFunc
-			// Use an in-memory loader for .env vars to avoid reading files twice
-			loaders = append(loaders, func(ctx context.Context) ([]*model.EnvVar, error) {
-				return loadedDotEnvVars, nil
-			})
-			loaders = append(loaders, tomlLoaders...)
-
-			// Create executor and usecase
-			exec := executor.NewDefaultExecutor()
-			uc := usecase.NewUseCase(loaders, exec)
-
-			// Get command arguments (excluding program name and flags)
-			args := cmd.Args().Slice()
-
-			// If no command specified, force list mode
-			if len(args) == 0 {
-				args = []string{} // Force empty args to show environment variables
-			}
-
-			err := uc.Run(ctx, args)
-			if err != nil {
-				exitCode := model.GetExitCode(err)
-				return model.WithExitCode(err, exitCode)
-			}
-			return nil
-		},
+	err := parser.AddOption(Option{
+		Name:         "env",
+		Aliases:      []string{"e"},
+		Usage:        "Load environment variables from .env file",
+		DefaultValue: ".env",
+		IsSlice:      true,
+	})
+	if err != nil {
+		return goerr.Wrap(err, "failed to add env option")
 	}
 
-	return app.Run(ctx, args)
+	err = parser.AddOption(Option{
+		Name:    "toml",
+		Aliases: []string{"t"},
+		Usage:   "Load environment variables from .toml file",
+		IsSlice: true,
+	})
+	if err != nil {
+		return goerr.Wrap(err, "failed to add toml option")
+	}
+
+	err = parser.AddOption(Option{
+		Name:         "log-level",
+		Aliases:      []string{"l"},
+		Usage:        "Set log level (debug, info, warn, error)",
+		DefaultValue: "warn",
+	})
+	if err != nil {
+		return goerr.Wrap(err, "failed to add log-level option")
+	}
+
+	// Check for help flag first
+	for _, arg := range args[1:] {
+		if arg == "-h" || arg == "--help" {
+			os.Stdout.WriteString("Usage: zenv [options] <command> [args...]\n\n")
+			os.Stdout.WriteString("Options:\n")
+			os.Stdout.WriteString(parser.Help() + "\n")
+			return nil
+		}
+		// Stop checking after first non-option
+		if !strings.HasPrefix(arg, "-") {
+			break
+		}
+	}
+
+	// Parse arguments
+	result, err := parser.Parse(ctx, args[1:]) // Skip program name
+	if err != nil {
+		// Show help message with error
+		os.Stderr.WriteString("\nUsage: zenv [options] <command> [args...]\n\n")
+		os.Stderr.WriteString("Options:\n")
+		os.Stderr.WriteString(parser.Help() + "\n")
+		return err
+	}
+
+	// Extract parsed values
+	envFiles := result.Options["env"].StringSlice()
+	tomlFiles := result.Options["toml"].StringSlice()
+	logLevel := result.Options["log-level"].String()
+	commandArgs := result.Args
+
+	// Create logger based on log-level flag
+	level := ParseLogLevel(logLevel)
+	logger := NewLogger(level, os.Stderr)
+
+	// Set logger in context for propagation
+	ctx = ctxlog.With(ctx, logger)
+
+	// Collect environment variables in order for TOML loader reference
+	var allExistingVars []*model.EnvVar
+
+	// First, collect system environment variables
+	for _, env := range os.Environ() {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			allExistingVars = append(allExistingVars, &model.EnvVar{
+				Name:   parts[0],
+				Value:  parts[1],
+				Source: model.SourceSystem,
+			})
+		}
+	}
+
+	// Load .env files once and collect their variables
+	var envLoaders []loader.LoadFunc
+	for _, envFile := range envFiles {
+		envLoaders = append(envLoaders, loader.NewDotEnvLoader(envFile))
+	}
+	if len(envFiles) == 0 {
+		envLoaders = append(envLoaders, loader.NewDotEnvLoader(".env"))
+	}
+
+	// Execute .env loaders once and collect results
+	var loadedDotEnvVars []*model.EnvVar
+	for _, loadFunc := range envLoaders {
+		envVars, err := loadFunc(ctx)
+		if err != nil {
+			return goerr.Wrap(err, "failed to load .env file")
+		}
+		if envVars != nil {
+			loadedDotEnvVars = append(loadedDotEnvVars, envVars...)
+		}
+	}
+	allExistingVars = append(allExistingVars, loadedDotEnvVars...)
+
+	// Now create TOML loaders with all existing variables
+	var tomlLoaders []loader.LoadFunc
+	for _, tomlFile := range tomlFiles {
+		tomlLoaders = append(tomlLoaders, loader.NewTOMLLoader(tomlFile, allExistingVars))
+	}
+	if len(tomlFiles) == 0 {
+		tomlLoaders = append(tomlLoaders, loader.NewTOMLLoader(".env.toml", allExistingVars))
+	}
+
+	// Combine all loaders for the usecase
+	var loaders []loader.LoadFunc
+	// Use an in-memory loader for .env vars to avoid reading files twice
+	loaders = append(loaders, func(ctx context.Context) ([]*model.EnvVar, error) {
+		return loadedDotEnvVars, nil
+	})
+	loaders = append(loaders, tomlLoaders...)
+
+	// Create executor and usecase
+	exec := executor.NewDefaultExecutor()
+	uc := usecase.NewUseCase(loaders, exec)
+
+	// If no command specified, force list mode
+	if len(commandArgs) == 0 {
+		commandArgs = []string{} // Force empty args to show environment variables
+	}
+
+	if err := uc.Run(ctx, commandArgs); err != nil {
+		exitCode := model.GetExitCode(err)
+		return model.WithExitCode(err, exitCode)
+	}
+	return nil
 }
