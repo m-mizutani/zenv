@@ -10,7 +10,6 @@
     - TOML configuration files with advanced features
     - Inline environment variable specification (KEY=value format)
     - System environment variables
-- Securely save, generate and get secret values with Keychain, inspired by [envchain](https://github.com/sorah/envchain) (supported only macOS)
 - Replace command line argument with loaded environment variable
 - Variable precedence: System < .env < TOML < Inline (later sources override earlier ones)
 
