@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -84,61 +85,50 @@ func ParseLogLevel(level string) slog.Level {
 }
 
 func Run(ctx context.Context, args []string) error {
-	// Create parser and configure options
-	parser := NewParser()
-
-	err := parser.AddOption(Option{
-		Name:         "env",
-		Aliases:      []string{"e"},
-		Usage:        "Load environment variables from .env file",
-		DefaultValue: ".env",
-		IsSlice:      true,
+	// Create parser with options
+	parser, err := NewParser([]Option{
+		{
+			Name:    "help",
+			Aliases: []string{"h"},
+			Usage:   "Show help message",
+		},
+		{
+			Name:    "env",
+			Aliases: []string{"e"},
+			Usage:   "Load environment variables from .env file",
+			IsSlice: true,
+		},
+		{
+			Name:    "toml",
+			Aliases: []string{"t"},
+			Usage:   "Load environment variables from .toml file",
+			IsSlice: true,
+		},
+		{
+			Name:         "log-level",
+			Aliases:      []string{"l"},
+			Usage:        "Set log level (debug, info, warn, error)",
+			DefaultValue: "warn",
+		},
 	})
 	if err != nil {
-		return goerr.Wrap(err, "failed to add env option")
-	}
-
-	err = parser.AddOption(Option{
-		Name:    "toml",
-		Aliases: []string{"t"},
-		Usage:   "Load environment variables from .toml file",
-		IsSlice: true,
-	})
-	if err != nil {
-		return goerr.Wrap(err, "failed to add toml option")
-	}
-
-	err = parser.AddOption(Option{
-		Name:         "log-level",
-		Aliases:      []string{"l"},
-		Usage:        "Set log level (debug, info, warn, error)",
-		DefaultValue: "warn",
-	})
-	if err != nil {
-		return goerr.Wrap(err, "failed to add log-level option")
-	}
-
-	// Check for help flag first
-	for _, arg := range args[1:] {
-		if arg == "-h" || arg == "--help" {
-			os.Stdout.WriteString("Usage: zenv [options] <command> [args...]\n\n")
-			os.Stdout.WriteString("Options:\n")
-			os.Stdout.WriteString(parser.Help() + "\n")
-			return nil
-		}
-		// Stop checking after first non-option
-		if !strings.HasPrefix(arg, "-") {
-			break
-		}
+		return goerr.Wrap(err, "failed to create parser")
 	}
 
 	// Parse arguments
 	result, err := parser.Parse(ctx, args[1:]) // Skip program name
 	if err != nil {
+		// Check if help was requested
+		if errors.Is(err, ErrHelpRequested) {
+			_, _ = os.Stdout.WriteString("Usage: zenv [options] <command> [args...]\n\n")
+			_, _ = os.Stdout.WriteString("Options:\n")
+			_, _ = os.Stdout.WriteString(parser.Help() + "\n")
+			return nil
+		}
 		// Show help message with error
-		os.Stderr.WriteString("\nUsage: zenv [options] <command> [args...]\n\n")
-		os.Stderr.WriteString("Options:\n")
-		os.Stderr.WriteString(parser.Help() + "\n")
+		_, _ = os.Stderr.WriteString("\nUsage: zenv [options] <command> [args...]\n\n")
+		_, _ = os.Stderr.WriteString("Options:\n")
+		_, _ = os.Stderr.WriteString(parser.Help() + "\n")
 		return err
 	}
 

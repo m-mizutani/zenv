@@ -9,177 +9,174 @@ import (
 )
 
 func TestNewParser(t *testing.T) {
-	parser := cli.NewParser()
+	parser, err := cli.NewParser([]cli.Option{})
+	gt.NoError(t, err)
 	gt.V(t, parser).NotNil()
 }
 
-func TestParser_AddOption(t *testing.T) {
+func TestParser_Creation(t *testing.T) {
 	t.Run("Success cases", func(t *testing.T) {
 		t.Run("Basic option", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name:    "env",
-				Aliases: []string{"e"},
-				Usage:   "Environment file",
+			parser, err := cli.NewParser([]cli.Option{
+				{
+					Name:    "env",
+					Aliases: []string{"e"},
+					Usage:   "Environment file",
+				},
 			})
 			gt.NoError(t, err)
+			gt.NotEqual(t, parser, nil)
 		})
 
 		t.Run("Option with default value", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name:         "log-level",
-				Usage:        "Log level",
-				DefaultValue: "warn",
+			parser, err := cli.NewParser([]cli.Option{
+				{
+					Name:         "log-level",
+					Usage:        "Log level",
+					DefaultValue: "warn",
+				},
 			})
 			gt.NoError(t, err)
+			gt.NotEqual(t, parser, nil)
 		})
 
 		t.Run("Slice option", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name:    "file",
-				Aliases: []string{"f"},
-				Usage:   "Input files",
-				IsSlice: true,
+			parser, err := cli.NewParser([]cli.Option{
+				{
+					Name:    "file",
+					Aliases: []string{"f"},
+					Usage:   "Input files",
+					IsSlice: true,
+				},
 			})
 			gt.NoError(t, err)
+			gt.NotEqual(t, parser, nil)
 		})
 
 		t.Run("Option with multiple aliases", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name:    "verbose",
-				Aliases: []string{"v", "verb", "debug"},
-				Usage:   "Verbose output",
+			parser, err := cli.NewParser([]cli.Option{
+				{
+					Name:    "verbose",
+					Aliases: []string{"v", "verb", "debug"},
+					Usage:   "Verbose output",
+				},
 			})
 			gt.NoError(t, err)
+			gt.NotEqual(t, parser, nil)
 		})
 
 		t.Run("Option with no aliases", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name:  "config-file",
-				Usage: "Configuration file path",
+			parser, err := cli.NewParser([]cli.Option{
+				{
+					Name:  "config-file",
+					Usage: "Configuration file path",
+				},
 			})
 			gt.NoError(t, err)
+			gt.NotEqual(t, parser, nil)
 		})
 
 		t.Run("Option with empty usage", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name: "test",
+			parser, err := cli.NewParser([]cli.Option{
+				{
+					Name: "test",
+				},
 			})
 			gt.NoError(t, err)
+			gt.NotEqual(t, parser, nil)
 		})
 	})
 
 	t.Run("Error cases", func(t *testing.T) {
 		t.Run("Empty name", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name: "",
+			_, err := cli.NewParser([]cli.Option{
+				{
+					Name: "",
+				},
 			})
 			gt.Error(t, err)
 		})
 
 		t.Run("Whitespace only name", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name: "   ",
+			_, err := cli.NewParser([]cli.Option{
+				{
+					Name: "   ",
+				},
 			})
 			gt.NoError(t, err) // This should be allowed - parser doesn't trim
 		})
 
 		t.Run("Duplicate option name", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{Name: "env"})
-			gt.NoError(t, err)
-
-			err = parser.AddOption(cli.Option{Name: "env"})
+			_, err := cli.NewParser([]cli.Option{
+				{Name: "env"},
+				{Name: "env"},
+			})
 			gt.Error(t, err)
 		})
 
 		t.Run("Duplicate option name case sensitive", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{Name: "env"})
-			gt.NoError(t, err)
-
-			err = parser.AddOption(cli.Option{Name: "ENV"})
+			_, err := cli.NewParser([]cli.Option{
+				{Name: "env"},
+				{Name: "ENV"},
+			})
 			gt.NoError(t, err) // Should be allowed - case sensitive
 		})
 
 		t.Run("Conflicting alias with option name", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{Name: "env"})
-			gt.NoError(t, err)
-
-			err = parser.AddOption(cli.Option{
-				Name:    "environment",
-				Aliases: []string{"env"}, // Conflicts with existing option name
+			_, err := cli.NewParser([]cli.Option{
+				{Name: "env"},
+				{
+					Name:    "environment",
+					Aliases: []string{"env"}, // Conflicts with existing option name
+				},
 			})
 			gt.Error(t, err)
 		})
 
 		t.Run("Conflicting alias with existing alias", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name:    "env",
-				Aliases: []string{"e"},
-			})
-			gt.NoError(t, err)
-
-			err = parser.AddOption(cli.Option{
-				Name:    "environment",
-				Aliases: []string{"e"}, // Conflicts with existing alias
+			_, err := cli.NewParser([]cli.Option{
+				{
+					Name:    "env",
+					Aliases: []string{"e"},
+				},
+				{
+					Name:    "environment",
+					Aliases: []string{"e"}, // Conflicts with existing alias
+				},
 			})
 			gt.Error(t, err)
 		})
 
 		t.Run("Multiple conflicting aliases", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name:    "verbose",
-				Aliases: []string{"v", "verb"},
-			})
-			gt.NoError(t, err)
-
-			err = parser.AddOption(cli.Option{
-				Name:    "version",
-				Aliases: []string{"ver", "v"}, // 'v' conflicts
+			_, err := cli.NewParser([]cli.Option{
+				{
+					Name:    "verbose",
+					Aliases: []string{"v", "verb"},
+				},
+				{
+					Name:    "version",
+					Aliases: []string{"ver", "v"}, // 'v' conflicts
+				},
 			})
 			gt.Error(t, err)
 		})
 
 		t.Run("Empty alias in slice", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name:    "test",
-				Aliases: []string{"", "t"}, // Empty alias
+			_, err := cli.NewParser([]cli.Option{
+				{
+					Name:    "test",
+					Aliases: []string{"", "t"}, // Empty alias
+				},
 			})
 			gt.NoError(t, err) // Should be allowed - parser doesn't validate empty aliases
 		})
 
 		t.Run("Duplicate aliases in same option", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			err := parser.AddOption(cli.Option{
-				Name:    "test",
-				Aliases: []string{"t", "t"}, // Duplicate in same option
+			_, err := cli.NewParser([]cli.Option{
+				{
+					Name:    "test",
+					Aliases: []string{"t", "t"}, // Duplicate in same option
+				},
 			})
 			gt.Error(t, err)
 		})
@@ -187,23 +184,24 @@ func TestParser_AddOption(t *testing.T) {
 }
 
 func setupParser() cli.Parser {
-	parser := cli.NewParser()
-	_ = parser.AddOption(cli.Option{
-		Name:         "env",
-		Aliases:      []string{"e"},
-		Usage:        "Environment file",
-		DefaultValue: ".env",
-	})
-	_ = parser.AddOption(cli.Option{
-		Name:    "toml",
-		Aliases: []string{"t"},
-		Usage:   "TOML file",
-		IsSlice: true,
-	})
-	_ = parser.AddOption(cli.Option{
-		Name:         "log-level",
-		Usage:        "Log level",
-		DefaultValue: "warn",
+	parser, _ := cli.NewParser([]cli.Option{
+		{
+			Name:         "env",
+			Aliases:      []string{"e"},
+			Usage:        "Environment file",
+			DefaultValue: ".env",
+		},
+		{
+			Name:    "toml",
+			Aliases: []string{"t"},
+			Usage:   "TOML file",
+			IsSlice: true,
+		},
+		{
+			Name:         "log-level",
+			Usage:        "Log level",
+			DefaultValue: "warn",
+		},
 	})
 	return parser
 }
@@ -594,15 +592,17 @@ func TestParser_Parse(t *testing.T) {
 		})
 
 		t.Run("Many options before command", func(t *testing.T) {
-			parser := cli.NewParser()
-
-			// Add many options
+			// Create many options
+			var options []cli.Option
 			for i := 0; i < 100; i++ {
-				_ = parser.AddOption(cli.Option{
+				options = append(options, cli.Option{
 					Name:    "opt" + string(rune(i%26+97)) + string(rune((i/26)%26+97)),
 					IsSlice: i%2 == 0,
 				})
 			}
+			
+			parser, err := cli.NewParser(options)
+			gt.NoError(t, err)
 
 			ctx := context.Background()
 			args := []string{}
@@ -653,19 +653,22 @@ func TestStringSliceValue(t *testing.T) {
 
 func TestParser_Help(t *testing.T) {
 	t.Run("Empty parser", func(t *testing.T) {
-		parser := cli.NewParser()
+		parser, err := cli.NewParser([]cli.Option{})
+		gt.NoError(t, err)
 		help := parser.Help()
 		gt.V(t, help).Equal("")
 	})
 
 	t.Run("Single option", func(t *testing.T) {
-		parser := cli.NewParser()
-		_ = parser.AddOption(cli.Option{
-			Name:         "env",
-			Aliases:      []string{"e"},
-			Usage:        "Environment file",
-			DefaultValue: ".env",
+		parser, err := cli.NewParser([]cli.Option{
+			{
+				Name:         "env",
+				Aliases:      []string{"e"},
+				Usage:        "Environment file",
+				DefaultValue: ".env",
+			},
 		})
+		gt.NoError(t, err)
 
 		help := parser.Help()
 		gt.V(t, len(help)).NotEqual(0)
@@ -679,65 +682,47 @@ func TestParser_Help(t *testing.T) {
 	})
 
 	t.Run("Option with no usage", func(t *testing.T) {
-		parser := cli.NewParser()
-		_ = parser.AddOption(cli.Option{
-			Name: "test",
+		parser, err := cli.NewParser([]cli.Option{
+			{
+				Name: "test",
+			},
 		})
+		gt.NoError(t, err)
 
 		help := parser.Help()
 		gt.V(t, len(help)).NotEqual(0)
 	})
 
 	t.Run("Option with no aliases", func(t *testing.T) {
-		parser := cli.NewParser()
-		_ = parser.AddOption(cli.Option{
-			Name:  "long-option-name",
-			Usage: "Test option",
+		parser, err := cli.NewParser([]cli.Option{
+			{
+				Name:  "long-option-name",
+				Usage: "Test option",
+			},
 		})
+		gt.NoError(t, err)
 
 		help := parser.Help()
 		gt.V(t, len(help)).NotEqual(0)
 	})
 }
 
-func TestParser_Validate(t *testing.T) {
-	t.Run("Empty parser should fail", func(t *testing.T) {
-		parser := cli.NewParser()
-
-		err := parser.Validate()
-		gt.Error(t, err)
-	})
-
-	t.Run("Parser with options should succeed", func(t *testing.T) {
-		parser := cli.NewParser()
-		_ = parser.AddOption(cli.Option{
-			Name: "test",
-		})
-
-		err := parser.Validate()
-		gt.NoError(t, err)
-	})
-
-	t.Run("Parser with many options should succeed", func(t *testing.T) {
-		parser := setupParser()
-
-		err := parser.Validate()
-		gt.NoError(t, err)
-	})
-}
+// TestParser_Validate was removed as the Validate method no longer exists
 
 func TestRealWorldScenarios(t *testing.T) {
 	t.Run("Original problem case", func(t *testing.T) {
-		parser := cli.NewParser()
-		_ = parser.AddOption(cli.Option{
-			Name:    "env",
-			Aliases: []string{"e"},
-			IsSlice: true,
+		parser, err := cli.NewParser([]cli.Option{
+			{
+				Name:    "env",
+				Aliases: []string{"e"},
+				IsSlice: true,
+			},
+			{
+				Name:         "log-level",
+				DefaultValue: "warn",
+			},
 		})
-		_ = parser.AddOption(cli.Option{
-			Name:         "log-level",
-			DefaultValue: "warn",
-		})
+		gt.NoError(t, err)
 
 		ctx := context.Background()
 
@@ -752,8 +737,10 @@ func TestRealWorldScenarios(t *testing.T) {
 	})
 
 	t.Run("Complex docker command", func(t *testing.T) {
-		parser := cli.NewParser()
-		_ = parser.AddOption(cli.Option{Name: "env", IsSlice: true})
+		parser, err := cli.NewParser([]cli.Option{
+			{Name: "env", IsSlice: true},
+		})
+		gt.NoError(t, err)
 
 		ctx := context.Background()
 
@@ -768,8 +755,10 @@ func TestRealWorldScenarios(t *testing.T) {
 	})
 
 	t.Run("Git command with many flags", func(t *testing.T) {
-		parser := cli.NewParser()
-		_ = parser.AddOption(cli.Option{Name: "log-level", DefaultValue: "info"})
+		parser, err := cli.NewParser([]cli.Option{
+			{Name: "log-level", DefaultValue: "info"},
+		})
+		gt.NoError(t, err)
 
 		ctx := context.Background()
 
@@ -783,8 +772,10 @@ func TestRealWorldScenarios(t *testing.T) {
 	})
 
 	t.Run("No command, only zenv options", func(t *testing.T) {
-		parser := cli.NewParser()
-		_ = parser.AddOption(cli.Option{Name: "env"})
+		parser, err := cli.NewParser([]cli.Option{
+			{Name: "env"},
+		})
+		gt.NoError(t, err)
 
 		ctx := context.Background()
 
@@ -797,8 +788,10 @@ func TestRealWorldScenarios(t *testing.T) {
 	})
 
 	t.Run("Command starting with dash", func(t *testing.T) {
-		parser := cli.NewParser()
-		_ = parser.AddOption(cli.Option{Name: "env"})
+		parser, err := cli.NewParser([]cli.Option{
+			{Name: "env"},
+		})
+		gt.NoError(t, err)
 
 		ctx := context.Background()
 
@@ -811,8 +804,10 @@ func TestRealWorldScenarios(t *testing.T) {
 	})
 
 	t.Run("Stress test - many repeated options", func(t *testing.T) {
-		parser := cli.NewParser()
-		_ = parser.AddOption(cli.Option{Name: "file", IsSlice: true})
+		parser, err := cli.NewParser([]cli.Option{
+			{Name: "file", IsSlice: true},
+		})
+		gt.NoError(t, err)
 
 		ctx := context.Background()
 
@@ -833,10 +828,12 @@ func TestRealWorldScenarios(t *testing.T) {
 	})
 
 	t.Run("Mixed option formats", func(t *testing.T) {
-		parser := cli.NewParser()
-		_ = parser.AddOption(cli.Option{Name: "input", Aliases: []string{"i"}, IsSlice: true})
-		_ = parser.AddOption(cli.Option{Name: "output", Aliases: []string{"o"}})
-		_ = parser.AddOption(cli.Option{Name: "verbose", Aliases: []string{"v"}})
+		parser, err := cli.NewParser([]cli.Option{
+			{Name: "input", Aliases: []string{"i"}, IsSlice: true},
+			{Name: "output", Aliases: []string{"o"}},
+			{Name: "verbose", Aliases: []string{"v"}},
+		})
+		gt.NoError(t, err)
 
 		ctx := context.Background()
 

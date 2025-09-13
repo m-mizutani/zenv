@@ -8,6 +8,15 @@ import (
 	"github.com/m-mizutani/goerr/v2"
 )
 
+// ErrHelpRequested is returned when help flag is detected
+type helpRequestedError struct{}
+
+func (e helpRequestedError) Error() string {
+	return "help requested"
+}
+
+var ErrHelpRequested = helpRequestedError{}
+
 // OptionValue represents a parsed option value
 type OptionValue interface {
 	String() string
@@ -50,6 +59,9 @@ func (s *StringSliceValue) String() string {
 }
 
 func (s *StringSliceValue) StringSlice() []string {
+	if !s.set {
+		return nil
+	}
 	return s.values
 }
 
@@ -74,17 +86,11 @@ type ParseResult struct {
 
 // Parser defines the interface for command line parsing
 type Parser interface {
-	// AddOption adds an option definition
-	AddOption(opt Option) error
-
 	// Parse parses the given arguments and returns options and remaining args
 	Parse(ctx context.Context, args []string) (*ParseResult, error)
 
 	// Help returns help text for all registered options
 	Help() string
-
-	// Validate validates the parser configuration
-	Validate() error
 }
 
 // DefaultParser implements the Parser interface
@@ -94,17 +100,26 @@ type DefaultParser struct {
 	values  map[string]OptionValue // parsed values
 }
 
-// NewParser creates a new default parser
-func NewParser() Parser {
-	return &DefaultParser{
+// NewParser creates a new default parser with the given options
+func NewParser(opts []Option) (Parser, error) {
+	p := &DefaultParser{
 		options: make(map[string]*Option),
 		aliases: make(map[string]*Option),
 		values:  make(map[string]OptionValue),
 	}
+
+	// Initialize options
+	for _, opt := range opts {
+		if err := p.addOption(opt); err != nil {
+			return nil, goerr.Wrap(err, "failed to add option")
+		}
+	}
+
+	return p, nil
 }
 
-// AddOption adds an option definition
-func (p *DefaultParser) AddOption(opt Option) error {
+// addOption adds an option definition (internal method)
+func (p *DefaultParser) addOption(opt Option) error {
 	if opt.Name == "" {
 		return goerr.New("option name cannot be empty")
 	}
@@ -188,9 +203,9 @@ func (p *DefaultParser) Parse(ctx context.Context, args []string) (*ParseResult,
 		var value string
 		var hasValue bool
 
-		if strings.HasPrefix(arg, "--") {
+		if after, found := strings.CutPrefix(arg, "--"); found {
 			// Long option
-			optName = strings.TrimPrefix(arg, "--")
+			optName = after
 			if idx := strings.Index(optName, "="); idx >= 0 {
 				value = optName[idx+1:]
 				optName = optName[:idx]
@@ -243,6 +258,11 @@ func (p *DefaultParser) Parse(ctx context.Context, args []string) (*ParseResult,
 		i++
 	}
 
+	// Check if help was requested
+	if helpVal, exists := result.Options["help"]; exists && helpVal.IsSet() {
+		return nil, ErrHelpRequested
+	}
+
 	return result, nil
 }
 
@@ -275,10 +295,3 @@ func (p *DefaultParser) Help() string {
 	return strings.Join(parts, "\n")
 }
 
-// Validate validates the parser configuration
-func (p *DefaultParser) Validate() error {
-	if len(p.options) == 0 {
-		return goerr.New("no options defined")
-	}
-	return nil
-}

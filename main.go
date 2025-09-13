@@ -12,7 +12,7 @@ func main() {
 	if err := cli.Run(context.Background(), os.Args); err != nil {
 		// Print error message to stderr
 		// Use goerr's detailed formatting if available
-		os.Stderr.WriteString("zenv: " + err.Error() + "\n")
+		_, _ = os.Stderr.WriteString("zenv: " + err.Error() + "\n")
 		exitCode := model.GetExitCode(err)
 		os.Exit(exitCode)
 	}
