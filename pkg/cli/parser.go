@@ -294,4 +294,3 @@ func (p *DefaultParser) Help() string {
 
 	return strings.Join(parts, "\n")
 }
-

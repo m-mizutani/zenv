@@ -600,7 +600,7 @@ func TestParser_Parse(t *testing.T) {
 					IsSlice: i%2 == 0,
 				})
 			}
-			
+
 			parser, err := cli.NewParser(options)
 			gt.NoError(t, err)
 
