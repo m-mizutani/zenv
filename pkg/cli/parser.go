@@ -79,10 +79,6 @@ type Option struct {
 	IsBoolean    bool     // Whether this is a boolean flag (no value required)
 }
 
-// ParserConfig defines configuration for the parser
-type ParserConfig struct {
-	StrictMode bool // Whether to validate flags after the first command argument
-}
 
 // ParseResult contains the result of parsing command line arguments
 type ParseResult struct {
@@ -104,21 +100,14 @@ type DefaultParser struct {
 	options map[string]*Option     // options by name
 	aliases map[string]*Option     // aliases to options mapping
 	values  map[string]OptionValue // parsed values
-	config  ParserConfig           // parser configuration
 }
 
 // NewParser creates a new default parser with the given options
 func NewParser(opts []Option) (Parser, error) {
-	return NewParserWithConfig(opts, ParserConfig{})
-}
-
-// NewParserWithConfig creates a new parser with specific configuration
-func NewParserWithConfig(opts []Option, config ParserConfig) (Parser, error) {
 	p := &DefaultParser{
 		options: make(map[string]*Option),
 		aliases: make(map[string]*Option),
 		values:  make(map[string]OptionValue),
-		config:  config,
 	}
 
 	// Initialize options
@@ -201,7 +190,6 @@ func (p *DefaultParser) Parse(ctx context.Context, args []string) (*ParseResult,
 	}
 
 	i := 0
-	inCommandArgs := false
 	for i < len(args) {
 		arg := args[i]
 
@@ -214,33 +202,9 @@ func (p *DefaultParser) Parse(ctx context.Context, args []string) (*ParseResult,
 
 		// Check if this looks like an option
 		if !strings.HasPrefix(arg, "-") {
-			// Not an option
-			if !inCommandArgs {
-				// First non-option argument starts command args
-				inCommandArgs = true
-			}
-
-			// In strict mode or not in command args yet, collect all remaining as command args
-			if !inCommandArgs || !p.config.StrictMode {
-				result.Args = args[i:]
-				break
-			} else {
-				// In command args and strict mode - just add this arg and continue
-				result.Args = append(result.Args, arg)
-				i++
-				continue
-			}
-		}
-
-		// This is a flag-like argument
-		if inCommandArgs && p.config.StrictMode {
-			// In strict mode, validate flags even after command arguments started
-			// Continue with flag parsing below
-		} else if inCommandArgs {
-			// Not in strict mode, treat as command argument
-			result.Args = append(result.Args, arg)
-			i++
-			continue
+			// Not an option - treat this and everything after as command arguments
+			result.Args = args[i:]
+			break
 		}
 
 		// Parse the option
