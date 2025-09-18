@@ -2,6 +2,8 @@ package cli_test
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/m-mizutani/gt"
@@ -850,5 +852,264 @@ func TestRealWorldScenarios(t *testing.T) {
 		gt.V(t, result.Options["output"].String()).Equal("output.txt")
 		gt.V(t, result.Options["verbose"].String()).Equal("true")
 		gt.V(t, result.Args).Equal([]string{"process", "--unknown-flag", "-x"})
+	})
+}
+
+func TestParser_BooleanFlags(t *testing.T) {
+	setupParser := func() cli.Parser {
+		parser, _ := cli.NewParser([]cli.Option{
+			{
+				Name:      "help",
+				Aliases:   []string{"h"},
+				IsBoolean: true,
+			},
+			{
+				Name:      "verbose",
+				Aliases:   []string{"v"},
+				IsBoolean: true,
+			},
+			{
+				Name:    "env",
+				Aliases: []string{"e"},
+			},
+		})
+		return parser
+	}
+
+	t.Run("Boolean flag help works", func(t *testing.T) {
+		parser := setupParser()
+		ctx := context.Background()
+
+		_, err := parser.Parse(ctx, []string{"--help"})
+		gt.Error(t, err)
+		gt.V(t, errors.Is(err, cli.ErrHelpRequested)).Equal(true)
+	})
+
+	t.Run("Boolean flag help with short alias works", func(t *testing.T) {
+		parser := setupParser()
+		ctx := context.Background()
+
+		_, err := parser.Parse(ctx, []string{"-h"})
+		gt.Error(t, err)
+		gt.V(t, errors.Is(err, cli.ErrHelpRequested)).Equal(true)
+	})
+
+	t.Run("Boolean flag with value via equals", func(t *testing.T) {
+		parser := setupParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{"--verbose=true", "echo", "hello"})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["verbose"].String()).Equal("true")
+		gt.V(t, result.Options["verbose"].IsSet()).Equal(true)
+		gt.V(t, result.Args).Equal([]string{"echo", "hello"})
+	})
+
+	t.Run("Boolean flag without value", func(t *testing.T) {
+		parser := setupParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{"--verbose", "echo", "hello"})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["verbose"].String()).Equal("true")
+		gt.V(t, result.Options["verbose"].IsSet()).Equal(true)
+		gt.V(t, result.Args).Equal([]string{"echo", "hello"})
+	})
+
+	t.Run("Mixed boolean and regular flags", func(t *testing.T) {
+		parser := setupParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{
+			"--env", "test.env",
+			"--verbose",
+			"go", "test",
+		})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["env"].String()).Equal("test.env")
+		gt.V(t, result.Options["verbose"].String()).Equal("true")
+		gt.V(t, result.Args).Equal([]string{"go", "test"})
+	})
+}
+
+func TestParser_DoubleDash(t *testing.T) {
+	setupParser := func() cli.Parser {
+		parser, _ := cli.NewParser([]cli.Option{
+			{
+				Name:    "env",
+				Aliases: []string{"e"},
+			},
+			{
+				Name:         "log-level",
+				DefaultValue: "warn",
+			},
+		})
+		return parser
+	}
+
+	t.Run("Double dash stops option parsing", func(t *testing.T) {
+		parser := setupParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{
+			"--env", "test.env",
+			"--",
+			"echo", "--help", "-v",
+		})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["env"].String()).Equal("test.env")
+		gt.V(t, result.Args).Equal([]string{"echo", "--help", "-v"})
+	})
+
+	t.Run("Double dash at beginning", func(t *testing.T) {
+		parser := setupParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{
+			"--",
+			"--env", "test.env", "echo", "--help",
+		})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["env"].String()).Equal("") // Default empty
+		gt.V(t, result.Args).Equal([]string{"--env", "test.env", "echo", "--help"})
+	})
+
+	t.Run("Double dash preserves all following arguments", func(t *testing.T) {
+		parser := setupParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{
+			"--env", "prod.env",
+			"--",
+			"go", "run", ".", "sync", "-w", "deploy", "-n",
+		})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["env"].String()).Equal("prod.env")
+		gt.V(t, result.Args).Equal([]string{"go", "run", ".", "sync", "-w", "deploy", "-n"})
+	})
+
+	t.Run("Multiple double dashes", func(t *testing.T) {
+		parser := setupParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{
+			"--env", "test.env",
+			"--",
+			"echo", "--", "hello", "--world",
+		})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["env"].String()).Equal("test.env")
+		gt.V(t, result.Args).Equal([]string{"echo", "--", "hello", "--world"})
+	})
+}
+
+func TestParser_ZenvBehavior(t *testing.T) {
+	setupZenvParser := func() cli.Parser {
+		parser, _ := cli.NewParser([]cli.Option{
+			{
+				Name:      "help",
+				Aliases:   []string{"h"},
+				IsBoolean: true,
+			},
+			{
+				Name:    "env",
+				Aliases: []string{"e"},
+				IsSlice: true,
+			},
+			{
+				Name:    "toml",
+				Aliases: []string{"t"},
+				IsSlice: true,
+			},
+			{
+				Name:         "log-level",
+				Aliases:      []string{"l"},
+				DefaultValue: "warn",
+			},
+		})
+		return parser
+	}
+
+	t.Run("zenv go run . sync -w deploy -n should work", func(t *testing.T) {
+		parser := setupZenvParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{"go", "run", ".", "sync", "-w", "deploy", "-n"})
+		gt.NoError(t, err)
+		gt.V(t, result.Args).Equal([]string{"go", "run", ".", "sync", "-w", "deploy", "-n"})
+	})
+
+	t.Run("zenv --env test.env go run . sync -w deploy -n should work", func(t *testing.T) {
+		parser := setupZenvParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{"--env", "test.env", "go", "run", ".", "sync", "-w", "deploy", "-n"})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["env"].StringSlice()).Equal([]string{"test.env"})
+		gt.V(t, result.Args).Equal([]string{"go", "run", ".", "sync", "-w", "deploy", "-n"})
+	})
+
+	t.Run("zenv -e prod.env -e local.env docker run -it --rm nginx", func(t *testing.T) {
+		parser := setupZenvParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{
+			"-e", "prod.env",
+			"-e", "local.env",
+			"docker", "run", "-it", "--rm", "nginx",
+		})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["env"].StringSlice()).Equal([]string{"prod.env", "local.env"})
+		gt.V(t, result.Args).Equal([]string{"docker", "run", "-it", "--rm", "nginx"})
+	})
+
+	t.Run("zenv with double dash", func(t *testing.T) {
+		parser := setupZenvParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{
+			"--env", "test.env",
+			"--",
+			"echo", "--help", "-v",
+		})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["env"].StringSlice()).Equal([]string{"test.env"})
+		gt.V(t, result.Args).Equal([]string{"echo", "--help", "-v"})
+	})
+
+	t.Run("unknown flags before command should fail", func(t *testing.T) {
+		parser := setupZenvParser()
+		ctx := context.Background()
+
+		_, err := parser.Parse(ctx, []string{"-w", "go", "run", "."})
+		gt.Error(t, err)
+		gt.V(t, strings.Contains(err.Error(), "unknown option: w")).Equal(true)
+	})
+
+	t.Run("flags after first non-option are treated as command args", func(t *testing.T) {
+		parser := setupZenvParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{
+			"--env", "test.env",
+			"git", "log", "--oneline", "--graph", "-n", "10",
+		})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["env"].StringSlice()).Equal([]string{"test.env"})
+		gt.V(t, result.Args).Equal([]string{"git", "log", "--oneline", "--graph", "-n", "10"})
+	})
+
+	t.Run("list mode when no command given", func(t *testing.T) {
+		parser := setupZenvParser()
+		ctx := context.Background()
+
+		result, err := parser.Parse(ctx, []string{
+			"--env", "test.env",
+			"--log-level", "debug",
+		})
+		gt.NoError(t, err)
+		gt.V(t, result.Options["env"].StringSlice()).Equal([]string{"test.env"})
+		gt.V(t, result.Options["log-level"].String()).Equal("debug")
+		gt.V(t, len(result.Args)).Equal(0)
 	})
 }

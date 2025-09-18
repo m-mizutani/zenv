@@ -88,9 +88,10 @@ func Run(ctx context.Context, args []string) error {
 	// Create parser with options
 	parser, err := NewParser([]Option{
 		{
-			Name:    "help",
-			Aliases: []string{"h"},
-			Usage:   "Show help message",
+			Name:      "help",
+			Aliases:   []string{"h"},
+			Usage:     "Show help message",
+			IsBoolean: true,
 		},
 		{
 			Name:    "env",

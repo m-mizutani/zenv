@@ -76,7 +76,9 @@ type Option struct {
 	Usage        string   // Description for help
 	DefaultValue string   // Default value
 	IsSlice      bool     // Whether this option accepts multiple values
+	IsBoolean    bool     // Whether this is a boolean flag (no value required)
 }
+
 
 // ParseResult contains the result of parsing command line arguments
 type ParseResult struct {
@@ -191,9 +193,16 @@ func (p *DefaultParser) Parse(ctx context.Context, args []string) (*ParseResult,
 	for i < len(args) {
 		arg := args[i]
 
+		// Check for -- (end of options marker)
+		if arg == "--" {
+			// Everything after -- should be treated as arguments
+			result.Args = append(result.Args, args[i+1:]...)
+			break
+		}
+
 		// Check if this looks like an option
 		if !strings.HasPrefix(arg, "-") {
-			// Not an option, treat this and everything after as command args
+			// Not an option - treat this and everything after as command arguments
 			result.Args = args[i:]
 			break
 		}
@@ -237,12 +246,17 @@ func (p *DefaultParser) Parse(ctx context.Context, args []string) (*ParseResult,
 
 		// Get the value
 		if !hasValue {
-			// Value should be in next argument
-			if i+1 >= len(args) {
-				return nil, goerr.New("option '" + optName + "' requires a value")
+			// For boolean flags, no value is needed
+			if option.IsBoolean {
+				value = "true"
+			} else {
+				// Value should be in next argument
+				if i+1 >= len(args) {
+					return nil, goerr.New("option '" + optName + "' requires a value")
+				}
+				i++
+				value = args[i]
 			}
-			i++
-			value = args[i]
 		}
 
 		// Store the value
