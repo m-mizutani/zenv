@@ -85,12 +85,13 @@ func ParseLogLevel(level string) slog.Level {
 }
 
 func Run(ctx context.Context, args []string) error {
-	// Create parser with options
-	parser, err := NewParser([]Option{
+	// Create parser with options and strict mode
+	parser, err := NewParserWithConfig([]Option{
 		{
-			Name:    "help",
-			Aliases: []string{"h"},
-			Usage:   "Show help message",
+			Name:      "help",
+			Aliases:   []string{"h"},
+			Usage:     "Show help message",
+			IsBoolean: true,
 		},
 		{
 			Name:    "env",
@@ -110,7 +111,7 @@ func Run(ctx context.Context, args []string) error {
 			Usage:        "Set log level (debug, info, warn, error)",
 			DefaultValue: "warn",
 		},
-	})
+	}, ParserConfig{StrictMode: false})
 	if err != nil {
 		return goerr.Wrap(err, "failed to create parser")
 	}
