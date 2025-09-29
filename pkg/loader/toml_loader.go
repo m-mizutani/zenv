@@ -15,6 +15,10 @@ import (
 )
 
 func NewTOMLLoader(path string, existingVars ...[]*model.EnvVar) LoadFunc {
+	return NewTOMLLoaderWithProfile(path, "", existingVars...)
+}
+
+func NewTOMLLoaderWithProfile(path string, profile string, existingVars ...[]*model.EnvVar) LoadFunc {
 	return func(ctx context.Context) ([]*model.EnvVar, error) {
 		logger := ctxlog.From(ctx)
 		logger.Debug("loading TOML file", "path", path)
@@ -37,18 +41,27 @@ func NewTOMLLoader(path string, existingVars ...[]*model.EnvVar) LoadFunc {
 		}
 
 		// Create unified resolver with existing variables
-		resolver := newUnifiedResolverWithVars(config, allExistingVars)
+		resolver := newUnifiedResolverWithProfileAndVars(config, profile, allExistingVars)
 
 		// Resolve all variables
 		var envVars []*model.EnvVar
 		for key, value := range config {
-			if err := value.Validate(); err != nil {
+			// Get value for the specified profile
+			effectiveValue := value.GetValueForProfile(profile)
+
+			// Skip if the value is empty (unset case)
+			if effectiveValue != nil && effectiveValue.IsEmpty() {
+				logger.Debug("skipping variable (unset in profile)", "key", key, "profile", profile)
+				continue
+			}
+
+			if err := effectiveValue.Validate(); err != nil {
 				logger.Error("invalid TOML configuration", "key", key, "error", err)
 				return nil, goerr.Wrap(err, "invalid configuration", goerr.V("key", key))
 			}
 
 			logger.Debug("resolving TOML variable", "key", key)
-			resolvedValue, err := resolver.resolve(key)
+			resolvedValue, err := resolver.resolveWithValue(key, effectiveValue)
 			if err != nil {
 				logger.Error("failed to resolve TOML variable", "key", key, "error", err)
 				return nil, goerr.Wrap(err, "failed to resolve variable",
@@ -88,12 +101,13 @@ func executeCommand(command string, args []string) (string, error) {
 // unifiedResolver handles resolution of all variable types with circular reference detection
 type unifiedResolver struct {
 	config       model.TOMLConfig
+	profile      string
 	resolvedVars map[string]string
 	resolving    map[string]bool   // Track variables currently being resolved
 	externalVars map[string]string // Variables from .env files, system environment, and other sources
 }
 
-func newUnifiedResolverWithVars(config model.TOMLConfig, existingVars []*model.EnvVar) *unifiedResolver {
+func newUnifiedResolverWithProfileAndVars(config model.TOMLConfig, profile string, existingVars []*model.EnvVar) *unifiedResolver {
 	// Cache all external variables (system environment + .env files, etc.)
 	externalVars := make(map[string]string)
 
@@ -114,6 +128,7 @@ func newUnifiedResolverWithVars(config model.TOMLConfig, existingVars []*model.E
 
 	return &unifiedResolver{
 		config:       config,
+		profile:      profile,
 		resolvedVars: make(map[string]string),
 		resolving:    make(map[string]bool),
 		externalVars: externalVars,
@@ -146,6 +161,17 @@ func (r *unifiedResolver) resolve(key string) (string, error) {
 		}
 		// Not found anywhere - return error for missing variable
 		return "", goerr.New("variable not found",
+			goerr.V("key", key))
+	}
+
+	// Get effective value considering profile
+	effectiveValue := config.GetValueForProfile(r.profile)
+	return r.resolveWithValue(key, effectiveValue)
+}
+
+func (r *unifiedResolver) resolveWithValue(key string, config *model.TOMLValue) (string, error) {
+	if config == nil {
+		return "", goerr.New("nil configuration for key",
 			goerr.V("key", key))
 	}
 

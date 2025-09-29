@@ -1,0 +1,9 @@
+# This should fail - nested profile is not allowed
+
+[INVALID_VAR]
+value = "default"
+[INVALID_VAR.profile.dev]
+value = "dev-value"
+# This nested profile should cause an error
+[INVALID_VAR.profile.dev.profile.sub]
+value = "nested-value"
