@@ -61,7 +61,7 @@ func (v TOMLValue) Validate() error {
 // UnmarshalTOML implements the toml.Unmarshaler interface to support both
 // simple format (KEY = "value") and section format ([KEY])
 func (c *TOMLConfig) UnmarshalTOML(data any) error {
-	// dataをmap[string]anyとして受け取る
+	// Receive data as map[string]any
 	raw, ok := data.(map[string]any)
 	if !ok {
 		return goerr.New("invalid TOML format")
@@ -72,11 +72,11 @@ func (c *TOMLConfig) UnmarshalTOML(data any) error {
 	for key, value := range raw {
 		switch v := value.(type) {
 		case string:
-			// シンプル形式: KEY = "value"
+			// Simple format: KEY = "value"
 			(*c)[key] = TOMLValue{Value: &v}
 		case map[string]any:
-			// セクション形式: [KEY] ...
-			// 一度エンコードして再度デコードすることで型安全に変換
+			// Section format: [KEY] ...
+			// Encode and decode again for type-safe conversion
 			var buf bytes.Buffer
 			if err := toml.NewEncoder(&buf).Encode(v); err != nil {
 				return goerr.Wrap(err, "failed to re-encode section",

@@ -9,7 +9,7 @@ import (
 )
 
 func TestTOMLConfigUnmarshalTOML_SimpleFormat(t *testing.T) {
-	// シンプル形式のみのテスト
+	// Test for simple format only
 	input := `
 DATABASE_URL = "postgres://localhost/mydb"
 API_KEY = "secret123"
@@ -37,7 +37,7 @@ PORT = "3000"
 }
 
 func TestTOMLConfigUnmarshalTOML_SectionFormat(t *testing.T) {
-	// セクション形式のみのテスト
+	// Test for section format only
 	input := `
 [DATABASE_URL]
 value = "postgres://localhost/mydb"
@@ -71,16 +71,16 @@ args = ["secretsmanager", "get-secret-value"]
 }
 
 func TestTOMLConfigUnmarshalTOML_MixedFormat(t *testing.T) {
-	// 混在形式のテスト
-	// TOML仕様: セクション定義後はそのセクション内の設定となるため、
-	// トップレベルのキー・バリューペアは全てセクション定義の前に配置する必要がある
+	// Test for mixed format
+	// TOML spec: After a section definition, all key-value pairs belong to that section,
+	// so all top-level key-value pairs must be placed before section definitions
 	input := `
-# シンプル形式（トップレベル）
+# Simple format (top-level)
 PORT = "3000"
 ENV = "development"
 API_KEY = "secret123"
 
-# セクション形式
+# Section format
 [DATABASE_URL]
 value = "postgres://localhost/mydb"
 
@@ -99,7 +99,7 @@ args = ["secretsmanager", "get-secret-value"]
 	// Check the actual keys in the config
 	gt.V(t, len(config)).Equal(6) // PORT, ENV, API_KEY, DATABASE_URL, SSL_CERT, AUTH_TOKEN
 
-	// シンプル形式
+	// Simple format
 	gt.V(t, config["PORT"].Value).NotNil()
 	gt.V(t, *config["PORT"].Value).Equal("3000")
 	gt.V(t, config["ENV"].Value).NotNil()
@@ -107,7 +107,7 @@ args = ["secretsmanager", "get-secret-value"]
 	gt.V(t, config["API_KEY"].Value).NotNil()
 	gt.V(t, *config["API_KEY"].Value).Equal("secret123")
 
-	// セクション形式
+	// Section format
 	gt.V(t, config["DATABASE_URL"].Value).NotNil()
 	gt.V(t, *config["DATABASE_URL"].Value).Equal("postgres://localhost/mydb")
 	gt.V(t, config["SSL_CERT"].File).NotNil()
@@ -117,7 +117,7 @@ args = ["secretsmanager", "get-secret-value"]
 }
 
 func TestTOMLConfigUnmarshalTOML_InvalidType(t *testing.T) {
-	// 数値型はサポートしない
+	// Numeric types are not supported
 	input := `
 INVALID = 123
 `
@@ -129,7 +129,7 @@ INVALID = 123
 }
 
 func TestTOMLConfigUnmarshalTOML_InvalidSectionFormat(t *testing.T) {
-	// セクション形式で複数のタイプを指定（無効）
+	// Section format with multiple types specified (invalid)
 	input := `
 [INVALID]
 value = "test"
@@ -143,16 +143,16 @@ file = "/path/to/file"
 }
 
 func TestTOMLConfigUnmarshalTOML_ComplexTypes(t *testing.T) {
-	// より複雑なセクション形式のテスト
+	// Test for more complex section format
 	input := `
-# エイリアスのテスト
+# Alias test
 [BASE_URL]
 value = "https://api.example.com"
 
 [API_ENDPOINT]
 alias = "BASE_URL"
 
-# テンプレートのテスト
+# Template test
 [GREETING]
 template = "Hello, {{.USER}}!"
 refs = ["USER"]
