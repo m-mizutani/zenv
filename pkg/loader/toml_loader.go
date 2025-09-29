@@ -49,9 +49,9 @@ func NewTOMLLoaderWithProfile(path string, profile string, existingVars ...[]*mo
 			// Get value for the specified profile
 			effectiveValue := value.GetValueForProfile(profile)
 
-			// Skip if the value is empty (unset case)
-			if effectiveValue != nil && effectiveValue.IsEmpty() {
-				logger.Debug("skipping variable (unset in profile)", "key", key, "profile", profile)
+			// Skip if the value is not defined for this profile (nil) or is explicitly unset (empty)
+			if effectiveValue == nil || effectiveValue.IsEmpty() {
+				logger.Debug("skipping variable (unset or not defined in profile)", "key", key, "profile", profile)
 				continue
 			}
 
