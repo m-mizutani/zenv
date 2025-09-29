@@ -217,7 +217,7 @@ refs = ["DB_USER", "DB_HOST"]
 USE_STAGING = "true"
 
 [API_ENDPOINT]
-template = "{{ if .USE_STAGING }}https://staging.api.com{{ else }}https://api.com{{ end }}"
+template = "{{ if .USE_STAGING }}https://staging.api.example.com{{ else }}https://api.example.com{{ end }}"
 refs = ["USE_STAGING"]
 ```
 

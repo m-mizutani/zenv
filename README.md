@@ -159,6 +159,12 @@ alias = "PRIMARY_DB"
 #### Template (Combine Variables)
 Build values from multiple variables using Go templates:
 ```toml
+[DB_USER]
+value = "admin"
+
+[DB_PASS]
+value = "secretpass"
+
 [DB_HOST]
 value = "localhost"
 
@@ -169,8 +175,8 @@ value = "5432"
 value = "myapp"
 
 [DATABASE_URL]
-template = "postgresql://user:pass@{{ .DB_HOST }}:{{ .DB_PORT }}/{{ .DB_NAME }}"
-refs = ["DB_HOST", "DB_PORT", "DB_NAME"]
+template = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:{{ .DB_PORT }}/{{ .DB_NAME }}"
+refs = ["DB_USER", "DB_PASS", "DB_HOST", "DB_PORT", "DB_NAME"]
 
 # Conditional logic
 [USE_STAGING]
