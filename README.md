@@ -62,28 +62,13 @@ $ zenv -e production.env psql
 
 ### Load from TOML configuration files
 
-TOML files provide advanced configuration options including file content reading and command execution.
-
 ```sh
 $ cat .env.toml
-[DATABASE_URL]
-value = "postgresql://localhost/mydb"
-
-[API_SECRET]
-file = "/path/to/secret.txt"
-
-[CURRENT_BRANCH]
-command = "git"
-args = ["rev-parse", "--abbrev-ref", "HEAD"]
-
-[MULTILINE_CONFIG]
-value = """
-line1
-line2
-line3
-"""
+DATABASE_URL = "postgresql://localhost/mydb"
+PORT = "3000"
 
 $ zenv -t .env.toml myapp
+# myapp runs with DATABASE_URL and PORT set from .env.toml
 ```
 
 ### Multiple files and precedence
@@ -107,9 +92,9 @@ Run without a command to see all loaded environment variables:
 ```sh
 $ zenv
 DATABASE_URL=postgresql://localhost/mydb [.toml]
+PORT=3000 [.toml]
 API_SECRET=secret_from_file [.toml]
 CURRENT_BRANCH=main [.toml]
-CUSTOM_VAR=inline_value [inline]
 PATH=/usr/bin:/bin [system]
 ...
 
@@ -119,68 +104,66 @@ $ zenv -e production.env -t config.toml
 
 ## TOML Configuration Format
 
-TOML files support four types of value specification:
+### Basic Usage
 
-### Static Values
+TOML files use standard key-value pairs for environment variables:
+
 ```toml
-[VARIABLE_NAME]
-value = "static string value"
+DATABASE_URL = "postgresql://localhost/mydb"
+API_KEY = "secret-key-123"
+PORT = "3000"
+DEBUG = "true"
 ```
 
-### File Content Reading
+### Advanced Features
+
+For capabilities beyond simple strings, use the section format:
+
+#### File Content Reading
+Load values from files:
 ```toml
 [SECRET_KEY]
 file = "/path/to/secret/file"
+
+[SSL_CERT]
+file = "/etc/ssl/certs/app.pem"
 ```
 
-### Command Execution
+#### Command Execution
+Execute commands and use their output:
 ```toml
 [GIT_COMMIT]
 command = "git"
 args = ["rev-parse", "HEAD"]
 
-[SIMPLE_COMMAND]
+[BUILD_TIME]
 command = "date"
+args = ["+%Y-%m-%d"]
 ```
 
-### Alias (Reference to Another Variable)
+#### Alias (Reference Another Variable)
+Reference existing variables:
 ```toml
-# Reference a system environment variable
+# Reference system environment variable
 [APP_HOME]
 alias = "HOME"
 
-# Reference another variable defined in the same TOML file
+# Reference another TOML variable
 [PRIMARY_DB]
 value = "postgresql://primary.example.com/maindb"
 
 [DATABASE_URL]
 alias = "PRIMARY_DB"
-
-# Alias takes precedence over other value types if multiple are specified
-[SECONDARY_DB]
-value = "postgresql://secondary.example.com/backupdb"
-
-[BACKUP_DB]
-alias = "SECONDARY_DB"  # This will be used
-value = "ignored_value"  # This will be ignored
 ```
 
-### Template (Combine Multiple Variables)
+#### Template (Combine Variables)
+Build values from multiple variables using Go templates:
 ```toml
-# Simple template with single variable
-[API_TOKEN]
-value = "secret-token-123"
-
-[AUTH_HEADER]
-template = "Bearer {{ .API_TOKEN }}"
-refs = ["API_TOKEN"]
-
-# Combine multiple variables
 [DB_USER]
 value = "admin"
 
 [DB_PASS]
-value = "secret"
+value = "secretpass"
 
 [DB_HOST]
 value = "localhost"
@@ -195,7 +178,7 @@ value = "myapp"
 template = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:{{ .DB_PORT }}/{{ .DB_NAME }}"
 refs = ["DB_USER", "DB_PASS", "DB_HOST", "DB_PORT", "DB_NAME"]
 
-# Conditional template
+# Conditional logic
 [USE_STAGING]
 value = "true"
 

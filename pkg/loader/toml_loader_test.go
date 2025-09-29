@@ -756,4 +756,76 @@ refs = ["MISSING_VAR"]
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("variable not found")
 	})
+
+	t.Run("Load TOML file with simple format only", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/simple_format.toml")
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 4)
+
+		// Verify values
+		expected := map[string]string{
+			"DATABASE_URL": "postgres://localhost/mydb",
+			"API_KEY":      "secret123",
+			"PORT":         "3000",
+			"ENV":          "development",
+		}
+
+		for _, envVar := range envVars {
+			gt.Equal(t, envVar.Source, model.SourceTOML)
+			expectedValue, exists := expected[envVar.Name]
+			gt.True(t, exists)
+			gt.Equal(t, envVar.Value, expectedValue)
+		}
+	})
+
+	t.Run("Load TOML file with mixed format", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/mixed_format.toml")
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		// TOKEN after section becomes part of LOG_LEVEL section, so only 6 top-level entries
+		gt.Equal(t, len(envVars), 6)
+
+		// Create a map for easier verification
+		envMap := make(map[string]*model.EnvVar)
+		for _, env := range envVars {
+			envMap[env.Name] = env
+		}
+
+		// Verify simple format values (before sections)
+		gt.V(t, envMap["PORT"]).NotNil()
+		gt.Equal(t, envMap["PORT"].Value, "3000")
+		gt.V(t, envMap["ENV"]).NotNil()
+		gt.Equal(t, envMap["ENV"].Value, "development")
+		gt.V(t, envMap["DEBUG"]).NotNil()
+		gt.Equal(t, envMap["DEBUG"].Value, "true")
+
+		// Verify section format values
+		gt.V(t, envMap["DATABASE_URL"]).NotNil()
+		gt.Equal(t, envMap["DATABASE_URL"].Value, "postgres://localhost/mydb")
+		gt.V(t, envMap["SSL_CERT"]).NotNil()
+		gt.Equal(t, envMap["SSL_CERT"].Value, "config file content")
+		gt.V(t, envMap["LOG_LEVEL"]).NotNil()
+		gt.Equal(t, envMap["LOG_LEVEL"].Value, "info")
+
+		// TOKEN after section is NOT a top-level key (becomes part of LOG_LEVEL section)
+		gt.V(t, envMap["TOKEN"]).Nil()
+
+		// All should have TOML source
+		for _, envVar := range envVars {
+			gt.Equal(t, envVar.Source, model.SourceTOML)
+		}
+	})
+
+	t.Run("Invalid type in simple format should fail", func(t *testing.T) {
+		// Create a temporary file with invalid content
+		tmpFile := filepath.Join(t.TempDir(), "invalid_simple.toml")
+		err := os.WriteFile(tmpFile, []byte("INVALID_NUMBER = 123\nVALID_STRING = \"test\""), 0644)
+		gt.NoError(t, err)
+
+		loadFunc := loader.NewTOMLLoader(tmpFile)
+		_, err = loadFunc(context.Background())
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("unsupported type")
+	})
 }

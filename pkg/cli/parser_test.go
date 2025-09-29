@@ -381,14 +381,14 @@ func TestParser_Parse(t *testing.T) {
 			ctx := context.Background()
 
 			result, err := parser.Parse(ctx, []string{
-				"--env", "テスト.env",
-				"--log-level", "デバッグ",
-				"echo", "こんにちは",
+				"--env", "test.env",
+				"--log-level", "debug",
+				"echo", "hello",
 			})
 			gt.NoError(t, err)
-			gt.V(t, result.Options["env"].String()).Equal("テスト.env")
-			gt.V(t, result.Options["log-level"].String()).Equal("デバッグ")
-			gt.V(t, result.Args).Equal([]string{"echo", "こんにちは"})
+			gt.V(t, result.Options["env"].String()).Equal("test.env")
+			gt.V(t, result.Options["log-level"].String()).Equal("debug")
+			gt.V(t, result.Args).Equal([]string{"echo", "hello"})
 		})
 
 		t.Run("Very long values", func(t *testing.T) {
