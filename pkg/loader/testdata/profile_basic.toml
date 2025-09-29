@@ -1,0 +1,28 @@
+# Basic profile functionality test
+
+[API_URL]
+value = "https://api.example.com"
+[API_URL.profile.dev]
+value = "http://localhost:8080"
+[API_URL.profile.staging]
+value = "https://staging-api.example.com"
+[API_URL.profile.prod]
+value = "https://api.example.com"
+
+[DB_HOST]
+value = "localhost"
+[DB_HOST.profile.dev]
+value = "localhost"
+[DB_HOST.profile.staging]
+value = "staging-db.example.com"
+[DB_HOST.profile.prod]
+value = "prod-db.example.com"
+
+[LOG_LEVEL]
+value = "info"
+[LOG_LEVEL.profile.dev]
+value = "debug"
+[LOG_LEVEL.profile.staging]
+value = "info"
+[LOG_LEVEL.profile.prod]
+value = "error"

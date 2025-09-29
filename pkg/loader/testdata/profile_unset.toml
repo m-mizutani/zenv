@@ -1,0 +1,21 @@
+# Test for unsetting variables with empty object
+
+[DEBUG_FLAG]
+value = "true"
+[DEBUG_FLAG.profile.dev]
+value = "true"
+[DEBUG_FLAG.profile.prod]
+# Empty section should unset DEBUG_FLAG in prod profile
+
+[VERBOSE_MODE]
+value = "enabled"
+[VERBOSE_MODE.profile.dev]
+value = "enabled"
+[VERBOSE_MODE.profile.staging]
+value = "disabled"
+[VERBOSE_MODE.profile.prod]
+# Empty section should unset VERBOSE_MODE in prod profile
+
+[FEATURE_FLAG]
+value = "on"
+# No profile specified, so always uses default value

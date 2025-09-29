@@ -32,6 +32,7 @@ zenv [OPTIONS] [ENVIRONMENT_VARIABLES] [COMMAND] [ARGS...]
 
 - `-e, --env FILE`: Load environment variables from .env file (can be specified multiple times)
 - `-t, --toml FILE`: Load environment variables from TOML file (can be specified multiple times)
+- `-p, --profile NAME`: Select profile from TOML configuration (e.g., dev, staging, prod)
 
 ## Basic Usage
 
@@ -192,11 +193,53 @@ template = "{{ .HOME }}/logs/{{ .APP_NAME }}.log"
 refs = ["HOME", "APP_NAME"]
 ```
 
-**Note**: 
+#### Profile Support
+Manage different configurations for different environments (dev, staging, prod, etc.):
+
+```toml
+# Basic profile usage - inline table format
+[API_URL]
+value = "https://api.example.com"
+profile = { dev = "http://localhost:8080", staging = "https://staging-api.example.com" }
+
+# Dotted key format within section
+[DATABASE_HOST]
+value = "prod-db.example.com"
+profile.dev = "localhost"
+profile.staging = "staging-db.example.com"
+
+# Unset variable in specific profile (empty object)
+[DEBUG_MODE]
+value = "false"
+profile = { dev = "true", prod = {} }  # prod profile will unset DEBUG_MODE
+
+# Profile with different value types
+[SSL_CERT]
+file = "/etc/ssl/prod.pem"
+
+[SSL_CERT.profile.dev]
+value = "-----BEGIN CERTIFICATE-----\ndev-cert\n-----END CERTIFICATE-----"
+
+[SSL_CERT.profile.staging]
+file = "/etc/ssl/staging.pem"
+```
+
+To use a specific profile, run:
+```bash
+# Use dev profile
+zenv -t config.toml -p dev myapp
+
+# Use staging profile
+zenv -t config.toml --profile staging deploy
+```
+
+**Note**:
 - Only one of `value`, `file`, `command`, `alias`, or `template` can be specified per variable
 - Templates use Go's `text/template` syntax
 - The `refs` field is required when using `template` and must list all variables referenced in the template
 - Circular references (e.g., A→B→A) will result in an error
+- Profile values override the default value when selected with `-p/--profile`
+- An empty object `{}` in a profile means the variable will be unset for that profile
 
 ## Migration from v1 to v2
 

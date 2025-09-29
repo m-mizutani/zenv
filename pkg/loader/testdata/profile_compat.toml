@@ -1,0 +1,27 @@
+# Test backward compatibility - mixing profile and non-profile variables
+
+# Traditional format without profile
+SIMPLE_VAR = "simple_value"
+
+# Section format without profile
+[COMPLEX_VAR]
+value = "complex_value"
+
+# Section with file reference, no profile
+[FILE_VAR]
+file = "testdata/config_content.txt"
+
+# New format with profile
+[PROFILE_VAR]
+value = "default_profile_value"
+[PROFILE_VAR.profile.dev]
+value = "dev_profile_value"
+[PROFILE_VAR.profile.prod]
+value = "prod_profile_value"
+
+# Mix of default value and some profiles
+[MIXED_VAR]
+value = "default_mixed"
+[MIXED_VAR.profile.staging]
+value = "staging_mixed"
+# dev and prod will use default value

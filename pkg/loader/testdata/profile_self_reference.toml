@@ -1,0 +1,7 @@
+# Test self-referencing format where the section name is repeated in dotted key
+# This happens when writing KEY.profile.dev inside [KEY] section
+[API_TOKEN]
+value = "default-token"
+
+# This creates a nested structure that needs special handling
+API_TOKEN.profile.dev = "dev-token"

@@ -106,6 +106,11 @@ func Run(ctx context.Context, args []string) error {
 			IsSlice: true,
 		},
 		{
+			Name:    "profile",
+			Aliases: []string{"p"},
+			Usage:   "Select profile from TOML configuration",
+		},
+		{
 			Name:         "log-level",
 			Aliases:      []string{"l"},
 			Usage:        "Set log level (debug, info, warn, error)",
@@ -137,6 +142,7 @@ func Run(ctx context.Context, args []string) error {
 	envFiles := result.Options["env"].StringSlice()
 	tomlFiles := result.Options["toml"].StringSlice()
 	logLevel := result.Options["log-level"].String()
+	profile := result.Options["profile"].String()
 	commandArgs := result.Args
 
 	// Create logger based on log-level flag
@@ -183,13 +189,13 @@ func Run(ctx context.Context, args []string) error {
 	}
 	allExistingVars = append(allExistingVars, loadedDotEnvVars...)
 
-	// Now create TOML loaders with all existing variables
+	// Now create TOML loaders with all existing variables and profile
 	var tomlLoaders []loader.LoadFunc
 	for _, tomlFile := range tomlFiles {
-		tomlLoaders = append(tomlLoaders, loader.NewTOMLLoader(tomlFile, allExistingVars))
+		tomlLoaders = append(tomlLoaders, loader.NewTOMLLoaderWithProfile(tomlFile, profile, allExistingVars))
 	}
 	if len(tomlFiles) == 0 {
-		tomlLoaders = append(tomlLoaders, loader.NewTOMLLoader(".env.toml", allExistingVars))
+		tomlLoaders = append(tomlLoaders, loader.NewTOMLLoaderWithProfile(".env.toml", profile, allExistingVars))
 	}
 
 	// Combine all loaders for the usecase

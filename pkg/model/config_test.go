@@ -183,3 +183,71 @@ value = "Alice"
 	gt.V(t, config["USER"].Value).NotNil()
 	gt.V(t, *config["USER"].Value).Equal("Alice")
 }
+
+func TestTOMLValueValidation(t *testing.T) {
+	t.Run("nested profile should be rejected", func(t *testing.T) {
+		// Create a value with nested profile
+		value := "test"
+		nestedValue := "nested"
+		tomlValue := model.TOMLValue{
+			Value: &value,
+			Profile: map[string]*model.TOMLValue{
+				"dev": {
+					Value: &nestedValue,
+					Profile: map[string]*model.TOMLValue{
+						"nested": {
+							Value: &nestedValue,
+						},
+					},
+				},
+			},
+		}
+
+		err := tomlValue.Validate()
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("nested profile is not allowed")
+	})
+
+	t.Run("profile without nested profile should be valid", func(t *testing.T) {
+		value := "test"
+		devValue := "dev-value"
+		tomlValue := model.TOMLValue{
+			Value: &value,
+			Profile: map[string]*model.TOMLValue{
+				"dev": {
+					Value: &devValue,
+				},
+				"prod": {}, // Empty object for unset
+			},
+		}
+
+		err := tomlValue.Validate()
+		gt.NoError(t, err)
+	})
+
+	t.Run("empty profile value should be valid", func(t *testing.T) {
+		value := "test"
+		tomlValue := model.TOMLValue{
+			Value: &value,
+			Profile: map[string]*model.TOMLValue{
+				"prod": {}, // Empty object
+			},
+		}
+
+		err := tomlValue.Validate()
+		gt.NoError(t, err)
+	})
+
+	t.Run("nil profile value should be valid", func(t *testing.T) {
+		value := "test"
+		tomlValue := model.TOMLValue{
+			Value: &value,
+			Profile: map[string]*model.TOMLValue{
+				"prod": nil,
+			},
+		}
+
+		err := tomlValue.Validate()
+		gt.NoError(t, err)
+	})
+}
