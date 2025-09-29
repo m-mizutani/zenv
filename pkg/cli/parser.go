@@ -79,7 +79,6 @@ type Option struct {
 	IsBoolean    bool     // Whether this is a boolean flag (no value required)
 }
 
-
 // ParseResult contains the result of parsing command line arguments
 type ParseResult struct {
 	Options map[string]OptionValue // Parsed options
