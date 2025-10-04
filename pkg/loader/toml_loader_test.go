@@ -829,7 +829,7 @@ refs = ["MISSING_VAR"]
 		gt.S(t, err.Error()).Contains("unsupported type")
 	})
 
-	t.Run("Command with single ref", func(t *testing.T) {
+	t.Run("Command with refs", func(t *testing.T) {
 		loadFunc := loader.NewTOMLLoader("testdata/command_with_refs.toml")
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
@@ -839,23 +839,31 @@ refs = ["MISSING_VAR"]
 			varMap[v.Name] = v.Value
 		}
 
-		// SIMPLE_MESSAGE should resolve {{.NAME}} to "World"
-		gt.Equal(t, varMap["SIMPLE_MESSAGE"], "Hello World")
+		testCases := []struct {
+			name        string
+			varName     string
+			expectedVal string
+		}{
+			{
+				name:        "single ref",
+				varName:     "SIMPLE_MESSAGE",
+				expectedVal: "Hello World",
+			},
+			{
+				name:        "multiple refs",
+				varName:     "MESSAGE",
+				expectedVal: "Server: prod-server:8080",
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				gt.Equal(t, varMap[tc.varName], tc.expectedVal)
+			})
+		}
+
+		// Verify the referenced variables are present
 		gt.Equal(t, varMap["NAME"], "World")
-	})
-
-	t.Run("Command with multiple refs", func(t *testing.T) {
-		loadFunc := loader.NewTOMLLoader("testdata/command_with_refs.toml")
-		envVars, err := loadFunc(context.Background())
-		gt.NoError(t, err)
-
-		varMap := make(map[string]string)
-		for _, v := range envVars {
-			varMap[v.Name] = v.Value
-		}
-
-		// MESSAGE should resolve {{.HOST}} and {{.PORT}}
-		gt.Equal(t, varMap["MESSAGE"], "Server: prod-server:8080")
 		gt.Equal(t, varMap["HOST"], "prod-server")
 		gt.Equal(t, varMap["PORT"], "8080")
 	})

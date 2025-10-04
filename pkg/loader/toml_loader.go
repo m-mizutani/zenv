@@ -138,6 +138,20 @@ func newUnifiedResolverWithProfileAndVars(config model.TOMLConfig, profile strin
 	}
 }
 
+// buildTemplateContext resolves all refs and builds a context map for template execution
+func (r *unifiedResolver) buildTemplateContext(refs []string) (map[string]string, error) {
+	context := make(map[string]string)
+	for _, ref := range refs {
+		refValue, err := r.resolve(ref)
+		if err != nil {
+			return nil, goerr.Wrap(err, "failed to resolve reference",
+				goerr.V("ref", ref))
+		}
+		context[ref] = refValue
+	}
+	return context, nil
+}
+
 func (r *unifiedResolver) resolve(key string) (string, error) {
 	// Check if already resolved
 	if value, exists := r.resolvedVars[key]; exists {
@@ -200,27 +214,23 @@ func (r *unifiedResolver) resolveWithValue(key string, config *model.TOMLValue) 
 		// If refs are present, resolve them and apply templates to command elements
 		if len(config.Refs) > 0 {
 			// Build context for template
-			context := make(map[string]string)
-			for _, ref := range config.Refs {
-				refValue, err := r.resolve(ref)
-				if err != nil {
-					return "", goerr.Wrap(err, "failed to resolve command reference",
-						goerr.V("ref", ref))
-				}
-				context[ref] = refValue
+			context, err := r.buildTemplateContext(config.Refs)
+			if err != nil {
+				return "", goerr.Wrap(err, "failed to build command template context")
 			}
 
 			// Apply template to each command element
 			resolvedCommand := make([]string, len(config.Command))
+			tmpl := template.New("cmd")
 			for i, cmdElement := range config.Command {
-				tmpl, err := template.New("cmd").Parse(cmdElement)
+				parsedTmpl, err := tmpl.Parse(cmdElement)
 				if err != nil {
 					return "", goerr.Wrap(err, "failed to parse command template",
 						goerr.V("element", cmdElement))
 				}
 
 				var buf bytes.Buffer
-				if err := tmpl.Execute(&buf, context); err != nil {
+				if err := parsedTmpl.Execute(&buf, context); err != nil {
 					return "", goerr.Wrap(err, "failed to execute command template",
 						goerr.V("element", cmdElement))
 				}
@@ -245,14 +255,9 @@ func (r *unifiedResolver) resolveWithValue(key string, config *model.TOMLValue) 
 
 	case config.Template != nil:
 		// Build context for template
-		context := make(map[string]string)
-		for _, ref := range config.Refs {
-			refValue, err := r.resolve(ref)
-			if err != nil {
-				return "", goerr.Wrap(err, "failed to resolve template reference",
-					goerr.V("ref", ref))
-			}
-			context[ref] = refValue
+		context, err := r.buildTemplateContext(config.Refs)
+		if err != nil {
+			return "", goerr.Wrap(err, "failed to build template context")
 		}
 
 		// Parse and execute template

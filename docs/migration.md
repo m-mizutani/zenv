@@ -8,8 +8,8 @@ This guide helps you migrate from zenv v1 to v2. **v2 encourages using `.env.tom
 |---------|-----------|----------------|-----------|
 | **Basic Variables** | `KEY=value` | `KEY = "value"` | Direct migration |
 | **File Content (`&` prefix)** | `KEY=&/path/file` | `[KEY]`<br>`file = "/path/file"` | Use section format |
-| **Command Execution (backticks)** | `KEY=`\`command\`` | `[KEY]`<br>`command = "cmd"`<br>`args = ["arg"]` | Use section format |
-| **Variable Replacement (`%`)** | `%VAR%` | `{{ .VAR }}` | Use templates |
+| **Command Execution (backticks)** | `KEY=`\`command\`` | `[KEY]`<br>`command = ["cmd", "arg"]` | Use section format |
+| **Variable Replacement (`%`)** | `%VAR%` | `{{ .VAR }}` | Use templates or command refs |
 | **Secret Management (Keychain)** | ✅ Built-in | ❌ **Removed** | Use external tools |
 
 ## Quick Start: Migrate to .env.toml
@@ -70,12 +70,10 @@ BUILD_DATE=`date +%Y%m%d`
 #### v2 (.env.toml)
 ```toml
 [GIT_HASH]
-command = "git"
-args = ["rev-parse", "HEAD"]
+command = ["git", "rev-parse", "HEAD"]
 
 [BUILD_DATE]
-command = "date"
-args = ["+%Y%m%d"]
+command = ["date", "+%Y%m%d"]
 ```
 
 ### Variable Replacement
@@ -179,8 +177,7 @@ file = "/secrets/db.txt"
 
 # Command execution
 [GIT_HASH]
-command = "git"
-args = ["rev-parse", "--short", "HEAD"]
+command = ["git", "rev-parse", "--short", "HEAD"]
 
 # Template for complex values
 [DATABASE_URL]
@@ -227,7 +224,7 @@ refs = ["USE_STAGING"]
 2. ☐ Rename `.env` to `.env.toml`
 3. ☐ Add quotes to all values: `KEY=value` → `KEY = "value"`
 4. ☐ Convert file loading: `KEY=&/path` → `[KEY] file = "/path"`
-5. ☐ Convert commands: `KEY=`\`cmd\`` → `[KEY] command = "cmd"`
+5. ☐ Convert commands: `KEY=`\`cmd arg\`` → `[KEY] command = ["cmd", "arg"]`
 6. ☐ Convert templates: `%VAR%` → `{{ .VAR }}`
 7. ☐ Test: `zenv myapp`
 
@@ -291,8 +288,7 @@ value = "postgresql://localhost/mydb"
 file = "/path/to/api/key"
 
 [GIT_COMMIT]
-command = "git"
-args = ["rev-parse", "HEAD"]
+command = ["git", "rev-parse", "HEAD"]
 ```
 
 ### Step 5: Update Scripts and CI/CD
@@ -355,8 +351,7 @@ API_BASE_URL=https://api.myapp.com
 file = "/etc/myapp/secret.key"
 
 [GIT_COMMIT]
-command = "git"
-args = ["rev-parse", "HEAD"]
+command = ["git", "rev-parse", "HEAD"]
 
 # Variable replacement with template
 [DATABASE_PASSWORD]
@@ -451,8 +446,7 @@ export DOCKER_TAG="${GIT_BRANCH}-$(git rev-parse --short HEAD)"
 
 # .env.toml (for command-based values)
 [GIT_BRANCH]
-command = "git"
-args = ["rev-parse", "--abbrev-ref", "HEAD"]
+command = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
 
 # Use external secret management for CI
 export SECRET_TOKEN=$CI_SECRET_TOKEN  # from CI environment
@@ -491,12 +485,11 @@ zenv -e .env -t config.toml
 **Solution**: Ensure proper TOML syntax for commands:
 
 ```toml
-# Correct
+# Correct - command as array
 [GIT_BRANCH]
-command = "git"
-args = ["rev-parse", "--abbrev-ref", "HEAD"]
+command = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
 
-# Incorrect
+# Incorrect - command as string
 [GIT_BRANCH]
 command = "git rev-parse --abbrev-ref HEAD"
 ```

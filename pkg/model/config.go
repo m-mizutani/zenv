@@ -91,11 +91,6 @@ func (v TOMLValue) Validate() error {
 		return goerr.New("multiple value types specified (only one of value, file, command, alias, or template can be specified)")
 	}
 
-	// Refs can only be used with templates or commands
-	if len(v.Refs) > 0 && v.Template == nil && len(v.Command) == 0 {
-		return goerr.New("refs can only be used with template or command")
-	}
-
 	// Validate profile values
 	for profileName, profileValue := range v.Profile {
 		if profileValue == nil {

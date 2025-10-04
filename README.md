@@ -134,12 +134,21 @@ file = "/etc/ssl/certs/app.pem"
 Execute commands and use their output:
 ```toml
 [GIT_COMMIT]
-command = "git"
-args = ["rev-parse", "HEAD"]
+command = ["git", "rev-parse", "HEAD"]
 
 [BUILD_TIME]
-command = "date"
-args = ["+%Y-%m-%d"]
+command = ["date", "+%Y-%m-%d"]
+
+# Command with template for dynamic values
+[HOSTNAME]
+value = "prod-server"
+
+[PORT]
+value = "8080"
+
+[SERVER_INFO]
+command = ["echo", "Server: {{.HOSTNAME}}:{{.PORT}}"]
+refs = ["HOSTNAME", "PORT"]
 ```
 
 #### Alias (Reference Another Variable)
@@ -235,8 +244,9 @@ zenv -t config.toml --profile staging deploy
 
 **Note**:
 - Only one of `value`, `file`, `command`, `alias`, or `template` can be specified per variable
-- Templates use Go's `text/template` syntax
-- The `refs` field is required when using `template` and must list all variables referenced in the template
+- `command` is an array of strings (e.g., `["git", "rev-parse", "HEAD"]`)
+- `refs` can be used with both `template` and `command` for variable references
+- Templates and command refs use Go's `text/template` syntax
 - Circular references (e.g., A→B→A) will result in an error
 - Profile values override the default value when selected with `-p/--profile`
 - An empty object `{}` in a profile means the variable will be unset for that profile
