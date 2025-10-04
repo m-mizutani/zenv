@@ -149,9 +149,9 @@ value = "https://api.example.com"
 [API_ENDPOINT]
 alias = "BASE_URL"
 
-# Template test
+# Value with refs test (acts as template)
 [GREETING]
-template = "Hello, {{.USER}}!"
+value = "Hello, {{.USER}}!"
 refs = ["USER"]
 
 [USER]
@@ -170,9 +170,9 @@ value = "Alice"
 	gt.V(t, config["API_ENDPOINT"].Alias).NotNil()
 	gt.V(t, *config["API_ENDPOINT"].Alias).Equal("BASE_URL")
 
-	// GREETING (template)
-	gt.V(t, config["GREETING"].Template).NotNil()
-	gt.V(t, *config["GREETING"].Template).Equal("Hello, {{.USER}}!")
+	// GREETING (value with refs - acts as template)
+	gt.V(t, config["GREETING"].Value).NotNil()
+	gt.V(t, *config["GREETING"].Value).Equal("Hello, {{.USER}}!")
 	gt.V(t, len(config["GREETING"].Refs)).Equal(1)
 	gt.V(t, config["GREETING"].Refs[0]).Equal("USER")
 

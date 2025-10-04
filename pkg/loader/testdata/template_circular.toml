@@ -1,17 +1,17 @@
 # Circular reference with templates
 [VAR_A]
-template = "Value: {{ .VAR_B }}"
+value = "Value: {{ .VAR_B }}"
 refs = ["VAR_B"]
 
 [VAR_B]
-template = "Value: {{ .VAR_C }}"
+value = "Value: {{ .VAR_C }}"
 refs = ["VAR_C"]
 
 [VAR_C]
-template = "Value: {{ .VAR_A }}"
+value = "Value: {{ .VAR_A }}"
 refs = ["VAR_A"]
 
 # Self-reference
 [SELF_REF]
-template = "Self: {{ .SELF_REF }}"
+value = "Self: {{ .SELF_REF }}"
 refs = ["SELF_REF"]

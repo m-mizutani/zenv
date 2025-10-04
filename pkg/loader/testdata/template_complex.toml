@@ -5,12 +5,12 @@
 value = ""
 
 [WITH_EMPTY]
-template = "Value: [{{ .EMPTY_VAR }}]"
+value = "Value: [{{ .EMPTY_VAR }}]"
 refs = ["EMPTY_VAR"]
 
 # Template with system environment variable
 [SYSTEM_VAR_TEMPLATE]
-template = "Path: {{ .PATH }}"
+value = "Path: {{ .PATH }}"
 refs = ["PATH"]
 
 # Template with non-existent reference - this variable was removed
@@ -34,7 +34,7 @@ value = "true"
 value = "info"
 
 [LOG_CONFIG]
-template = "{{ if eq .DEBUG_MODE \"true\" }}debug{{ else }}{{ .LOG_LEVEL }}{{ end }}"
+value = "{{ if eq .DEBUG_MODE \"true\" }}debug{{ else }}{{ .LOG_LEVEL }}{{ end }}"
 refs = ["DEBUG_MODE", "LOG_LEVEL"]
 
 # Nested template references
@@ -45,11 +45,11 @@ value = "https://api.example.com"
 value = "v2"
 
 [API_PATH]
-template = "{{ .BASE_URL }}/{{ .API_VERSION }}"
+value = "{{ .BASE_URL }}/{{ .API_VERSION }}"
 refs = ["BASE_URL", "API_VERSION"]
 
 [FULL_ENDPOINT]
-template = "{{ .API_PATH }}/users"
+value = "{{ .API_PATH }}/users"
 refs = ["API_PATH"]
 
 # Template with string manipulation
@@ -60,5 +60,5 @@ value = "john_doe"
 value = "example.com"
 
 [EMAIL]
-template = "{{ .USERNAME }}@{{ .DOMAIN }}"
+value = "{{ .USERNAME }}@{{ .DOMAIN }}"
 refs = ["USERNAME", "DOMAIN"]
