@@ -9,6 +9,5 @@ file = "/path/to/file"
 alias = "SOME_VAR"
 
 [YET_ANOTHER_INVALID]
-command = "echo"
-args = ["test"]
+command = ["echo", "test"]
 alias = "TEST_VAR"

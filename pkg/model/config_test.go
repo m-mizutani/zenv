@@ -46,8 +46,7 @@ value = "postgres://localhost/mydb"
 file = "/path/to/cert.pem"
 
 [AUTH_TOKEN]
-command = "aws"
-args = ["secretsmanager", "get-secret-value"]
+command = ["aws", "secretsmanager", "get-secret-value"]
 `
 
 	var config model.TOMLConfig
@@ -63,11 +62,10 @@ args = ["secretsmanager", "get-secret-value"]
 	gt.V(t, *config["SSL_CERT"].File).Equal("/path/to/cert.pem")
 
 	// AUTH_TOKEN
-	gt.V(t, config["AUTH_TOKEN"].Command).NotNil()
-	gt.V(t, *config["AUTH_TOKEN"].Command).Equal("aws")
-	gt.V(t, len(config["AUTH_TOKEN"].Args)).Equal(2)
-	gt.V(t, config["AUTH_TOKEN"].Args[0]).Equal("secretsmanager")
-	gt.V(t, config["AUTH_TOKEN"].Args[1]).Equal("get-secret-value")
+	gt.V(t, len(config["AUTH_TOKEN"].Command)).Equal(3)
+	gt.V(t, config["AUTH_TOKEN"].Command[0]).Equal("aws")
+	gt.V(t, config["AUTH_TOKEN"].Command[1]).Equal("secretsmanager")
+	gt.V(t, config["AUTH_TOKEN"].Command[2]).Equal("get-secret-value")
 }
 
 func TestTOMLConfigUnmarshalTOML_MixedFormat(t *testing.T) {
@@ -88,8 +86,7 @@ value = "postgres://localhost/mydb"
 file = "/path/to/cert.pem"
 
 [AUTH_TOKEN]
-command = "aws"
-args = ["secretsmanager", "get-secret-value"]
+command = ["aws", "secretsmanager", "get-secret-value"]
 `
 
 	var config model.TOMLConfig
@@ -112,8 +109,8 @@ args = ["secretsmanager", "get-secret-value"]
 	gt.V(t, *config["DATABASE_URL"].Value).Equal("postgres://localhost/mydb")
 	gt.V(t, config["SSL_CERT"].File).NotNil()
 	gt.V(t, *config["SSL_CERT"].File).Equal("/path/to/cert.pem")
-	gt.V(t, config["AUTH_TOKEN"].Command).NotNil()
-	gt.V(t, *config["AUTH_TOKEN"].Command).Equal("aws")
+	gt.V(t, len(config["AUTH_TOKEN"].Command)).Equal(3)
+	gt.V(t, config["AUTH_TOKEN"].Command[0]).Equal("aws")
 }
 
 func TestTOMLConfigUnmarshalTOML_InvalidType(t *testing.T) {

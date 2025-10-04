@@ -8,16 +8,13 @@ value = "-----BEGIN CERTIFICATE-----\ndev-cert-content\n-----END CERTIFICATE----
 file = "testdata/config_content.txt"
 
 [HOSTNAME]
-command = "echo"
-args = ["default-host"]
+command = ["echo", "default-host"]
 [HOSTNAME.profile.dev]
 value = "dev-server"
 [HOSTNAME.profile.staging]
-command = "echo"
-args = ["staging-server"]
+command = ["echo", "staging-server"]
 [HOSTNAME.profile.prod]
-command = "echo"
-args = ["prod-server"]
+command = ["echo", "prod-server"]
 
 [API_KEY]
 alias = "PRIMARY_DB"
