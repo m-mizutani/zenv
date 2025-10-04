@@ -5,6 +5,29 @@
 
 `zenv` is enhanced `env` command to manage environment variables in CLI.
 
+```toml
+# .env.toml - Powerful environment variable management
+DB_USER = "admin"
+DB_HOST = "localhost"
+
+[DB_PASSWORD]
+file = "/path/to/db_secret"  # Load from file
+
+[API_KEY]
+file = "/path/to/api_key"
+
+[DATABASE_URL]
+value = "postgresql://{{ .DB_USER }}:{{ .DB_PASSWORD }}@{{ .DB_HOST }}/mydb"
+refs = ["DB_USER", "DB_PASSWORD", "DB_HOST"]  # Build from variables
+
+[CONFIG_DATA]
+command = ["curl", "-H", "Authorization: Bearer {{ .API_KEY }}", "https://api.example.com/config"]
+refs = ["API_KEY"]  # Fetch data from API
+
+[DATABASE_URL.profile]
+dev = "sqlite://local.db"  # Override with profile
+```
+
 - Load environment variables from multiple sources:
     - `.env` files with static values, file content reading, and command execution
     - TOML configuration files with advanced features
