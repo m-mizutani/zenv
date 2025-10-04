@@ -347,7 +347,7 @@ value = "test"
 		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("failed to parse")
+		gt.S(t, err.Error()).Contains("failed to parse value template")
 	})
 
 	t.Run("Template without refs field", func(t *testing.T) {
