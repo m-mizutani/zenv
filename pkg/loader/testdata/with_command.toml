@@ -1,3 +1,2 @@
 [HOSTNAME]
-command = "echo"
-args = ["test-host"]
+command = ["echo", "test-host"]

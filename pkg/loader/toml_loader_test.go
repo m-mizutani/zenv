@@ -829,4 +829,56 @@ refs = ["MISSING_VAR"]
 		gt.S(t, err.Error()).Contains("unsupported type")
 	})
 
+	t.Run("Command with single ref", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/command_with_refs.toml")
+		envVars, err := loadFunc(context.Background())
+		gt.NoError(t, err)
+
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		// SIMPLE_MESSAGE should resolve {{.NAME}} to "World"
+		gt.Equal(t, varMap["SIMPLE_MESSAGE"], "Hello World")
+		gt.Equal(t, varMap["NAME"], "World")
+	})
+
+	t.Run("Command with multiple refs", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/command_with_refs.toml")
+		envVars, err := loadFunc(context.Background())
+		gt.NoError(t, err)
+
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		// MESSAGE should resolve {{.HOST}} and {{.PORT}}
+		gt.Equal(t, varMap["MESSAGE"], "Server: prod-server:8080")
+		gt.Equal(t, varMap["HOST"], "prod-server")
+		gt.Equal(t, varMap["PORT"], "8080")
+	})
+
+	t.Run("Command with circular refs should fail", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/command_circular_refs.toml")
+		_, err := loadFunc(context.Background())
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("circular reference")
+	})
+
+	t.Run("Command without refs should work", func(t *testing.T) {
+		loadFunc := loader.NewTOMLLoader("testdata/with_command.toml")
+		envVars, err := loadFunc(context.Background())
+		gt.NoError(t, err)
+
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		// HOSTNAME should execute ["echo", "test-host"]
+		gt.Equal(t, varMap["HOSTNAME"], "test-host")
+	})
+
 }

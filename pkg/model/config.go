@@ -18,9 +18,7 @@ type TOMLValue struct {
 	// File specifies a file path to read the value from
 	File *string `toml:"file,omitempty"`
 	// Command specifies a command to execute to get the value
-	Command *string `toml:"command,omitempty"`
-	// Args are arguments for the command
-	Args []string `toml:"args,omitempty"`
+	Command []string `toml:"command,omitempty"`
 	// Alias references another environment variable
 	Alias *string `toml:"alias,omitempty"`
 	// Template is a Go template string that can reference other variables
@@ -37,10 +35,9 @@ func (v *TOMLValue) IsEmpty() bool {
 	return v != nil &&
 		v.Value == nil &&
 		v.File == nil &&
-		v.Command == nil &&
+		len(v.Command) == 0 &&
 		v.Alias == nil &&
 		v.Template == nil &&
-		len(v.Args) == 0 &&
 		len(v.Refs) == 0 &&
 		len(v.Profile) == 0
 }
@@ -61,12 +58,12 @@ func (v *TOMLValue) GetValueForProfile(profile string) *TOMLValue {
 // Validate checks that the TOMLValue configuration is valid.
 // Rules:
 // - Only one of value, file, command, alias, or template can be specified
-// - Refs can only be used with template
+// - Refs can only be used with template or command
 // - Nested profiles are not allowed
 func (v TOMLValue) Validate() error {
-	// Refs should only be used with template (check this first to give more specific error)
-	if v.Template == nil && len(v.Refs) > 0 {
-		return goerr.New("refs can only be used with template")
+	// Refs should only be used with template or command (check this first to give more specific error)
+	if v.Template == nil && len(v.Command) == 0 && len(v.Refs) > 0 {
+		return goerr.New("refs can only be used with template or command")
 	}
 
 	count := 0
@@ -76,7 +73,7 @@ func (v TOMLValue) Validate() error {
 	if v.File != nil {
 		count++
 	}
-	if v.Command != nil {
+	if len(v.Command) > 0 {
 		count++
 	}
 	if v.Alias != nil {
@@ -94,9 +91,9 @@ func (v TOMLValue) Validate() error {
 		return goerr.New("multiple value types specified (only one of value, file, command, alias, or template can be specified)")
 	}
 
-	// Refs can only be used with templates
-	if len(v.Refs) > 0 && v.Template == nil {
-		return goerr.New("refs can only be used with template")
+	// Refs can only be used with templates or commands
+	if len(v.Refs) > 0 && v.Template == nil && len(v.Command) == 0 {
+		return goerr.New("refs can only be used with template or command")
 	}
 
 	// Validate profile values
@@ -183,7 +180,7 @@ func mergeTOMLValues(base, from *TOMLValue) *TOMLValue {
 		result.File = base.File
 	}
 
-	if from.Command != nil {
+	if len(from.Command) > 0 {
 		result.Command = from.Command
 	} else {
 		result.Command = base.Command
@@ -199,12 +196,6 @@ func mergeTOMLValues(base, from *TOMLValue) *TOMLValue {
 		result.Template = from.Template
 	} else {
 		result.Template = base.Template
-	}
-
-	if len(from.Args) > 0 {
-		result.Args = from.Args
-	} else {
-		result.Args = base.Args
 	}
 
 	if len(from.Refs) > 0 {
