@@ -118,7 +118,7 @@ DEBUG = "true"
 
 ### Advanced Features
 
-For capabilities beyond simple strings, use the section format:
+For capabilities beyond simple strings, use the section format `[VARIABLE_NAME]`:
 
 #### File Content Reading
 Load values from files:
@@ -138,69 +138,52 @@ command = ["git", "rev-parse", "HEAD"]
 
 [BUILD_TIME]
 command = ["date", "+%Y-%m-%d"]
-
-# Command with template for dynamic values
-[HOSTNAME]
-value = "prod-server"
-
-[PORT]
-value = "8080"
-
-[SERVER_INFO]
-command = ["echo", "Server: {{.HOSTNAME}}:{{.PORT}}"]
-refs = ["HOSTNAME", "PORT"]
 ```
 
-#### Alias (Reference Another Variable)
-Reference existing variables:
+#### Variable References (Alias)
+Reference other variables or system environment variables:
 ```toml
-# Reference system environment variable
 [APP_HOME]
-alias = "HOME"
+alias = "HOME"  # References system environment variable
 
-# Reference another TOML variable
 [PRIMARY_DB]
 value = "postgresql://primary.example.com/maindb"
 
 [DATABASE_URL]
-alias = "PRIMARY_DB"
+alias = "PRIMARY_DB"  # References another TOML variable
 ```
 
-#### Template (Combine Variables)
-Build values from multiple variables using Go templates:
+#### Templates (Variable Interpolation)
+Combine multiple variables using Go's text/template syntax by adding `refs`:
 ```toml
 [DB_USER]
 value = "admin"
 
-[DB_PASS]
-value = "secretpass"
-
 [DB_HOST]
 value = "localhost"
-
-[DB_PORT]
-value = "5432"
 
 [DB_NAME]
 value = "myapp"
 
+# Simple interpolation
 [DATABASE_URL]
-template = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:{{ .DB_PORT }}/{{ .DB_NAME }}"
-refs = ["DB_USER", "DB_PASS", "DB_HOST", "DB_PORT", "DB_NAME"]
+value = "postgresql://{{ .DB_USER }}@{{ .DB_HOST }}/{{ .DB_NAME }}"
+refs = ["DB_USER", "DB_HOST", "DB_NAME"]
 
 # Conditional logic
 [USE_STAGING]
 value = "true"
 
 [API_ENDPOINT]
-template = "{{ if .USE_STAGING }}https://staging.api.example.com{{ else }}https://api.example.com{{ end }}"
+value = "{{ if eq .USE_STAGING \"true\" }}https://staging.api.example.com{{ else }}https://api.example.com{{ end }}"
 refs = ["USE_STAGING"]
-
-# Template can reference aliases and system environment variables
-[LOG_PATH]
-template = "{{ .HOME }}/logs/{{ .APP_NAME }}.log"
-refs = ["HOME", "APP_NAME"]
 ```
+
+**Template Features:**
+- Use `{{ .VAR_NAME }}` to reference variables
+- Support conditional logic: `{{ if }}`/`{{ else }}`/`{{ end }}`
+- Can reference system environment variables, .env variables, and TOML variables
+- Both `value` and `command` support templates with `refs`
 
 #### Profile Support
 Manage different configurations for different environments (dev, staging, prod, etc.):
@@ -242,14 +225,22 @@ zenv -t config.toml -p dev myapp
 zenv -t config.toml --profile staging deploy
 ```
 
-**Note**:
-- Only one of `value`, `file`, `command`, `alias`, or `template` can be specified per variable
-- `command` is an array of strings (e.g., `["git", "rev-parse", "HEAD"]`)
-- `refs` can be used with both `template` and `command` for variable references
-- Templates and command refs use Go's `text/template` syntax
+## Configuration Rules
+
+**Value Types** (only one can be specified per variable):
+- `value`: Direct string value (becomes a template when used with `refs`)
+- `file`: Read content from a file path
+- `command`: Execute command and use output
+- `alias`: Reference another variable
+
+**Additional Options:**
+- `refs`: List of variables to reference in templates (used with `value` or `command`)
+- `profile`: Environment-specific overrides (dev, staging, prod, etc.)
+
+**Important Notes:**
 - Circular references (e.g., A→B→A) will result in an error
-- Profile values override the default value when selected with `-p/--profile`
-- An empty object `{}` in a profile means the variable will be unset for that profile
+- Profile values override defaults when selected with `-p/--profile`
+- Empty profile `{}` unsets the variable for that environment
 
 ## Migration from v1 to v2
 

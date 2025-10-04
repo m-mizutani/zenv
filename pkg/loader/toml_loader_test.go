@@ -250,7 +250,7 @@ alias = "EMPTY_SYSTEM_VAR"
 		// Create a TOML file that uses system var in template
 		tomlContent := `
 [FROM_SYSTEM]
-template = "System: {{ .TEST_SYS_VAR }}"
+value = "System: {{ .TEST_SYS_VAR }}"
 refs = ["TEST_SYS_VAR"]
 `
 		tmpFile := gt.R1(os.CreateTemp("", "test_template_sys*.toml")).NoError(t)
@@ -333,7 +333,7 @@ refs = ["TEST_SYS_VAR"]
 		// Create a TOML file with template syntax error
 		tomlContent := `
 [SYNTAX_ERROR]
-template = "{{ .VAR_NAME"
+value = "{{ .VAR_NAME"
 refs = ["VAR_NAME"]
 
 [VAR_NAME]
@@ -347,14 +347,14 @@ value = "test"
 		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("failed to parse template")
+		gt.S(t, err.Error()).Contains("failed to parse")
 	})
 
 	t.Run("Template without refs field", func(t *testing.T) {
-		// Create a TOML file with template but no refs (should work)
+		// Create a TOML file with value but no refs (should work as static value)
 		tomlContent := `
 [NO_REFS]
-template = "Static template text"
+value = "Static template text"
 `
 		tmpFile := gt.R1(os.CreateTemp("", "test_template_norefs*.toml")).NoError(t)
 		defer os.Remove(tmpFile.Name())
@@ -383,16 +383,15 @@ refs = ["SOME_VAR"]
 		loadFunc := loader.NewTOMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("refs can only be used with template")
+		gt.S(t, err.Error()).Contains("refs can only be used with value or command")
 	})
 
 	t.Run("Template with multiple value types", func(t *testing.T) {
-		// Create a TOML file with both value and template
+		// Create a TOML file with both value and file (invalid)
 		tomlContent := `
 [MULTIPLE_TYPES]
-value = "value"
-template = "{{ .OTHER }}"
-refs = ["OTHER"]
+value = "some value"
+file = "/path/to/file"
 `
 		tmpFile := gt.R1(os.CreateTemp("", "test_template_multiple*.toml")).NoError(t)
 		defer os.Remove(tmpFile.Name())
@@ -408,7 +407,7 @@ refs = ["OTHER"]
 	t.Run("Template referenced by an alias", func(t *testing.T) {
 		tomlContent := `
 [TEMPLATE_VAR]
-template = "hello world"
+value = "hello world"
 refs = []
 
 [ALIAS_VAR]
@@ -467,7 +466,7 @@ alias = "TEMPLATE_VAR"
 alias = "VAR_B"
 
 [VAR_B]
-template = "B uses {{ .VAR_C }}"
+value = "B uses {{ .VAR_C }}"
 refs = ["VAR_C"]
 
 [VAR_C]
@@ -489,7 +488,7 @@ alias = "VAR_A"
 		// Create a test where template references itself through an alias
 		tomlContent := `
 [SELF_TEMPLATE]
-template = "Self: {{ .SELF_ALIAS }}"
+value = "Self: {{ .SELF_ALIAS }}"
 refs = ["SELF_ALIAS"]
 
 [SELF_ALIAS]
@@ -514,7 +513,7 @@ alias = "SELF_TEMPLATE"
 		tomlPath := filepath.Join(tmpDir, "test.toml")
 		tomlContent := `
 [DB_URL]
-template = "postgres://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:5432/mydb"
+value = "postgres://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:5432/mydb"
 refs = ["DB_USER", "DB_PASS", "DB_HOST"]
 `
 		gt.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
@@ -576,7 +575,7 @@ alias = "DATABASE_URL"
 value = "toml_value"
 
 [RESULT]
-template = "Value is: {{ .PRIORITY_VAR }}"
+value = "Value is: {{ .PRIORITY_VAR }}"
 refs = ["PRIORITY_VAR"]
 `
 		gt.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
@@ -623,7 +622,7 @@ value = "myapp"
 value = "8080"
 
 [FULL_URL]
-template = "https://{{ .ENV_USER }}@{{ .SYS_HOST }}:{{ .PORT }}/{{ .APP_NAME }}"
+value = "https://{{ .ENV_USER }}@{{ .SYS_HOST }}:{{ .PORT }}/{{ .APP_NAME }}"
 refs = ["ENV_USER", "SYS_HOST", "PORT", "APP_NAME"]
 `
 		gt.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
@@ -680,7 +679,7 @@ value = "simple_value"
 		tomlPath := filepath.Join(tmpDir, "test.toml")
 		tomlContent := `
 [TEST_TEMPLATE]
-template = "prefix {{ .MISSING_VAR }} suffix"
+value = "prefix {{ .MISSING_VAR }} suffix"
 refs = ["MISSING_VAR"]
 `
 		gt.NoError(t, os.WriteFile(tomlPath, []byte(tomlContent), 0644))
@@ -719,7 +718,7 @@ alias = "MISSING_VAR"
 		tomlPath1 := filepath.Join(tmpDir, "empty.toml")
 		tomlContent1 := `
 [TEST_EMPTY]
-template = "prefix {{ .EMPTY_VAR }} suffix"
+value = "prefix {{ .EMPTY_VAR }} suffix"
 refs = ["EMPTY_VAR"]
 `
 		gt.NoError(t, os.WriteFile(tomlPath1, []byte(tomlContent1), 0644))
@@ -743,7 +742,7 @@ refs = ["EMPTY_VAR"]
 		tomlPath2 := filepath.Join(tmpDir, "missing.toml")
 		tomlContent2 := `
 [TEST_MISSING]
-template = "prefix {{ .MISSING_VAR }} suffix"
+value = "prefix {{ .MISSING_VAR }} suffix"
 refs = ["MISSING_VAR"]
 `
 		gt.NoError(t, os.WriteFile(tomlPath2, []byte(tomlContent2), 0644))

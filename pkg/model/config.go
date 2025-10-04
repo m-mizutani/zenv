@@ -21,9 +21,7 @@ type TOMLValue struct {
 	Command []string `toml:"command,omitempty"`
 	// Alias references another environment variable
 	Alias *string `toml:"alias,omitempty"`
-	// Template is a Go template string that can reference other variables
-	Template *string `toml:"template,omitempty"`
-	// Refs lists the environment variables referenced in the template
+	// Refs lists the environment variables referenced in value or command templates
 	Refs []string `toml:"refs,omitempty"`
 	// Profile contains profile-specific configurations
 	Profile map[string]*TOMLValue `toml:"profile,omitempty"`
@@ -37,7 +35,6 @@ func (v *TOMLValue) IsEmpty() bool {
 		v.File == nil &&
 		len(v.Command) == 0 &&
 		v.Alias == nil &&
-		v.Template == nil &&
 		len(v.Refs) == 0 &&
 		len(v.Profile) == 0
 }
@@ -57,13 +54,13 @@ func (v *TOMLValue) GetValueForProfile(profile string) *TOMLValue {
 
 // Validate checks that the TOMLValue configuration is valid.
 // Rules:
-// - Only one of value, file, command, alias, or template can be specified
-// - Refs can only be used with template or command
+// - Only one of value, file, command, or alias can be specified
+// - Refs can only be used with value or command
 // - Nested profiles are not allowed
 func (v TOMLValue) Validate() error {
-	// Refs should only be used with template or command (check this first to give more specific error)
-	if v.Template == nil && len(v.Command) == 0 && len(v.Refs) > 0 {
-		return goerr.New("refs can only be used with template or command")
+	// Refs should only be used with value or command (check this first to give more specific error)
+	if v.Value == nil && len(v.Command) == 0 && len(v.Refs) > 0 {
+		return goerr.New("refs can only be used with value or command")
 	}
 
 	count := 0
@@ -79,16 +76,13 @@ func (v TOMLValue) Validate() error {
 	if v.Alias != nil {
 		count++
 	}
-	if v.Template != nil {
-		count++
-	}
 
 	// Allow empty values only if profile is present
 	if count == 0 && len(v.Profile) == 0 {
 		return goerr.New("no value specified")
 	}
 	if count > 1 {
-		return goerr.New("multiple value types specified (only one of value, file, command, alias, or template can be specified)")
+		return goerr.New("multiple value types specified (only one of value, file, command, or alias can be specified)")
 	}
 
 	// Validate profile values
@@ -185,12 +179,6 @@ func mergeTOMLValues(base, from *TOMLValue) *TOMLValue {
 		result.Alias = from.Alias
 	} else {
 		result.Alias = base.Alias
-	}
-
-	if from.Template != nil {
-		result.Template = from.Template
-	} else {
-		result.Template = base.Template
 	}
 
 	if len(from.Refs) > 0 {

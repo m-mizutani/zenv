@@ -5,19 +5,19 @@
 alias = "TEMPLATE_B"
 
 [TEMPLATE_B]
-template = "Value: {{ .ALIAS_A }}"
+value = "Value: {{ .ALIAS_A }}"
 refs = ["ALIAS_A"]
 
 # Case 2: Template -> Alias -> Template (circular)
 [TEMPLATE_X]
-template = "X: {{ .ALIAS_Y }}"
+value = "X: {{ .ALIAS_Y }}"
 refs = ["ALIAS_Y"]
 
 [ALIAS_Y]
 alias = "TEMPLATE_Z"
 
 [TEMPLATE_Z]
-template = "Z: {{ .TEMPLATE_X }}"
+value = "Z: {{ .TEMPLATE_X }}"
 refs = ["TEMPLATE_X"]
 
 # Case 3: Longer chain A -> B -> C -> A
@@ -25,7 +25,7 @@ refs = ["TEMPLATE_X"]
 alias = "VAR_2"
 
 [VAR_2]
-template = "2: {{ .VAR_3 }}"
+value = "2: {{ .VAR_3 }}"
 refs = ["VAR_3"]
 
 [VAR_3]

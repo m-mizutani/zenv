@@ -3,7 +3,7 @@
 value = "world"
 
 [TEMPLATE_VAR]
-template = "hello {{ .BASE_VALUE }}"
+value = "hello {{ .BASE_VALUE }}"
 refs = ["BASE_VALUE"]
 
 [ALIAS_TO_TEMPLATE]

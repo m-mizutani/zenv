@@ -90,7 +90,7 @@ DB_PASS = "secret"
 DB_HOST = "localhost"
 
 [DATABASE_URL]
-template = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}/mydb"
+value = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}/mydb"
 refs = ["DB_USER", "DB_PASS", "DB_HOST"]
 ```
 
@@ -181,7 +181,7 @@ command = ["git", "rev-parse", "--short", "HEAD"]
 
 # Template for complex values
 [DATABASE_URL]
-template = "postgresql://{{ .DB_USER }}:{{ .DB_PASSWORD }}@localhost/mydb"
+value = "postgresql://{{ .DB_USER }}:{{ .DB_PASSWORD }}@localhost/mydb"
 refs = ["DB_USER", "DB_PASSWORD"]
 ```
 
@@ -205,7 +205,7 @@ DB_HOST = "localhost"
 
 # Combine with template
 [DATABASE_URL]
-template = "postgresql://{{ .DB_USER }}@{{ .DB_HOST }}/myapp"
+value = "postgresql://{{ .DB_USER }}@{{ .DB_HOST }}/myapp"
 refs = ["DB_USER", "DB_HOST"]
 ```
 
@@ -214,7 +214,7 @@ refs = ["DB_USER", "DB_HOST"]
 USE_STAGING = "true"
 
 [API_ENDPOINT]
-template = "{{ if .USE_STAGING }}https://staging.api.example.com{{ else }}https://api.example.com{{ end }}"
+value = "{{ if .USE_STAGING }}https://staging.api.example.com{{ else }}https://api.example.com{{ end }}"
 refs = ["USE_STAGING"]
 ```
 
@@ -355,12 +355,12 @@ command = ["git", "rev-parse", "HEAD"]
 
 # Variable replacement with template
 [DATABASE_PASSWORD]
-template = "{{ .VAULT_DATABASE_PASS }}"
+value = "{{ .VAULT_DATABASE_PASS }}"
 refs = ["VAULT_DATABASE_PASS"]
 
 # Complex variable replacement
 [DATABASE_URL]
-template = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:5432/myapp"
+value = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:5432/myapp"
 refs = ["DB_USER", "DB_PASS", "DB_HOST"]
 ```
 

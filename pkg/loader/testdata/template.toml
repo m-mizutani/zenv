@@ -3,7 +3,7 @@
 value = "secret-token-123"
 
 [AUTH_HEADER]
-template = "Bearer {{ .API_TOKEN }}"
+value = "Bearer {{ .API_TOKEN }}"
 refs = ["API_TOKEN"]
 
 # Multiple variable template
@@ -23,7 +23,7 @@ value = "5432"
 value = "myapp"
 
 [DATABASE_URL]
-template = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:{{ .DB_PORT }}/{{ .DB_NAME }}"
+value = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:{{ .DB_PORT }}/{{ .DB_NAME }}"
 refs = ["DB_USER", "DB_PASS", "DB_HOST", "DB_PORT", "DB_NAME"]
 
 # Conditional template
@@ -31,7 +31,7 @@ refs = ["DB_USER", "DB_PASS", "DB_HOST", "DB_PORT", "DB_NAME"]
 value = "true"
 
 [API_ENDPOINT]
-template = "{{ if .USE_STAGING }}https://staging.api.example.com{{ else }}https://api.example.com{{ end }}"
+value = "{{ if .USE_STAGING }}https://staging.api.example.com{{ else }}https://api.example.com{{ end }}"
 refs = ["USE_STAGING"]
 
 # Template referencing alias
@@ -42,5 +42,5 @@ value = "postgres://primary.db.example.com/app"
 alias = "PRIMARY_DB"
 
 [CONNECTION_STRING]
-template = "Connection: {{ .DB_CONNECTION }}"
+value = "Connection: {{ .DB_CONNECTION }}"
 refs = ["DB_CONNECTION"]

@@ -31,12 +31,12 @@ value = "postgres://localhost/primary"
 value = "postgres://localhost/secondary"
 
 [CONFIG_PATH]
-template = "/etc/{{.ENV}}/config.yml"
+value = "/etc/{{.ENV}}/config.yml"
 refs = ["ENV"]
 [CONFIG_PATH.profile.dev]
 value = "/home/dev/config.yml"
 [CONFIG_PATH.profile.prod]
-template = "/opt/{{.ENV}}/{{.APP}}/config.yml"
+value = "/opt/{{.ENV}}/{{.APP}}/config.yml"
 refs = ["ENV", "APP"]
 
 [ENV]

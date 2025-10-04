@@ -198,7 +198,33 @@ func (r *unifiedResolver) resolveWithValue(key string, config *model.TOMLValue) 
 
 	switch {
 	case config.Value != nil:
-		resolvedValue = *config.Value
+		// If refs are present, treat value as a template
+		if len(config.Refs) > 0 {
+			// Build context for template
+			context, err := r.buildTemplateContext(config.Refs)
+			if err != nil {
+				return "", goerr.Wrap(err, "failed to build template context")
+			}
+
+			// Parse and execute template
+			tmpl, err := template.New("env").Parse(*config.Value)
+			if err != nil {
+				return "", goerr.Wrap(err, "failed to parse value template",
+					goerr.V("value", *config.Value))
+			}
+
+			var buf bytes.Buffer
+			if err := tmpl.Execute(&buf, context); err != nil {
+				return "", goerr.Wrap(err, "failed to execute value template",
+					goerr.V("value", *config.Value),
+					goerr.V("key", key))
+			}
+
+			resolvedValue = buf.String()
+		} else {
+			// No refs, use value as-is
+			resolvedValue = *config.Value
+		}
 
 	case config.File != nil:
 		resolvedValue, err = readFile(*config.File)
@@ -252,29 +278,6 @@ func (r *unifiedResolver) resolveWithValue(key string, config *model.TOMLValue) 
 			return "", goerr.Wrap(err, "failed to resolve alias",
 				goerr.V("alias", *config.Alias))
 		}
-
-	case config.Template != nil:
-		// Build context for template
-		context, err := r.buildTemplateContext(config.Refs)
-		if err != nil {
-			return "", goerr.Wrap(err, "failed to build template context")
-		}
-
-		// Parse and execute template
-		tmpl, err := template.New("env").Parse(*config.Template)
-		if err != nil {
-			return "", goerr.Wrap(err, "failed to parse template",
-				goerr.V("template", *config.Template))
-		}
-
-		var buf bytes.Buffer
-		if err := tmpl.Execute(&buf, context); err != nil {
-			return "", goerr.Wrap(err, "failed to execute template",
-				goerr.V("template", *config.Template),
-				goerr.V("key", key))
-		}
-
-		resolvedValue = buf.String()
 	}
 
 	// Cache the resolved value
