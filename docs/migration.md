@@ -508,6 +508,10 @@ command = "git rev-parse --abbrev-ref HEAD"
 ```toml
 [SECRET]
 file = "/absolute/path/to/file"  # Use absolute paths
+
+# or
+
+SECRET.file = "/absolute/path/to/file"  # Use absolute paths
 ```
 
 ## Best Practices for v2
