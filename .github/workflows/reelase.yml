@@ -1,6 +1,7 @@
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
@@ -26,11 +27,10 @@ jobs:
           GOOS: ${{ env.goos }}
           GOARCH: ${{ matrix.goarch }}
       - name: Compress
-        run: tar -zcvf zenv-${{ github.event.release.tag_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz zenv
-      - uses: shogo82148/actions-upload-release-asset@v1
+        run: tar -zcvf zenv-${{ github.ref_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz zenv
+      - uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: zenv-${{ github.event.release.tag_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz
+          files: zenv-${{ github.ref_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz
 
   releases-macos:
     name: Release Go Binary for MacOS
@@ -52,8 +52,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
       - name: Compress
-        run: tar -zcvf zenv-${{ github.event.release.tag_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz zenv
-      - uses: shogo82148/actions-upload-release-asset@v1
+        run: tar -zcvf zenv-${{ github.ref_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz zenv
+      - uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: zenv-${{ github.event.release.tag_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz
+          files: zenv-${{ github.ref_name }}-${{ env.goos }}-${{ matrix.goarch }}.tar.gz
