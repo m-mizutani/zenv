@@ -77,9 +77,7 @@ func (uc *UseCase) Run(ctx context.Context, args []string) error {
 	err := uc.Executor(ctx, command, commandArgs, mergedEnvVars)
 	if err != nil {
 		exitCode := model.GetExitCode(err)
-		if exitCode != 1 { // Only log if it's not the default error code
-			logger.Info("command completed with non-zero exit code", "exit_code", exitCode)
-		}
+		logger.Debug("command completed with non-zero exit code", "exit_code", exitCode)
 		return err // Return the error with embedded exit code
 	}
 

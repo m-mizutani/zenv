@@ -37,11 +37,11 @@ func NewDefaultExecutor() ExecuteFunc {
 			if exitError, ok := err.(*exec.ExitError); ok {
 				if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
 					exitCode := status.ExitStatus()
-					logger.Warn("command exited with non-zero code", "cmd", cmd, "exit_code", exitCode)
+					logger.Debug("command exited with non-zero code", "cmd", cmd, "exit_code", exitCode)
 					return model.WithExitCode(goerr.Wrap(err, "command exited with non-zero code"), exitCode)
 				}
 			}
-			logger.Error("failed to execute command", "cmd", cmd, "error", err)
+			logger.Debug("failed to execute command", "cmd", cmd, "error", err)
 			return model.WithExitCode(goerr.Wrap(err, "failed to execute command"), 1)
 		}
 

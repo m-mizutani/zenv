@@ -232,18 +232,18 @@ func mergeTOMLValues(base, from *TOMLValue) *TOMLValue {
 // UnmarshalTOML implements the toml.Unmarshaler interface for TOMLConfig.
 // It supports multiple TOML formats:
 //
-// 1. Simple format:
-//    KEY = "value"
+//  1. Simple format:
+//     KEY = "value"
 //
-// 2. Section format:
-//    [KEY]
-//    value = "something"
-//    profile.dev = "dev-value"
+//  2. Section format:
+//     [KEY]
+//     value = "something"
+//     profile.dev = "dev-value"
 //
-// 3. Self-referencing format (special handling):
-//    [KEY]
-//    value = "default"
-//    KEY.profile.dev = "dev-value"  # Self-reference inside [KEY] section
+//  3. Self-referencing format (special handling):
+//     [KEY]
+//     value = "default"
+//     KEY.profile.dev = "dev-value"  # Self-reference inside [KEY] section
 //
 // The self-referencing format requires special handling because the TOML
 // library creates a nested structure that needs to be flattened.
