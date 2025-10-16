@@ -1,2 +1,0 @@
-[HOSTNAME]
-command = ["echo", "test-host"]

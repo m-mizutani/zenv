@@ -42,16 +42,16 @@ ANOTHER_VAR=another_value`
 		gt.S(t, string(output)).Contains("[.env]")
 	})
 
-	t.Run("Run with -t option", func(t *testing.T) {
-		// Create temporary .toml file
-		tmpFile := gt.R1(os.CreateTemp("", "test*.toml")).NoError(t)
+	t.Run("Run with -c option", func(t *testing.T) {
+		// Create temporary .yaml file
+		tmpFile := gt.R1(os.CreateTemp("", "test*.yaml")).NoError(t)
 		defer os.Remove(tmpFile.Name())
 
-		content := `[TEST_VAR]
-value = "test_value"
+		content := `TEST_VAR:
+  value: "test_value"
 
-[ANOTHER_VAR]
-value = "another_value"`
+ANOTHER_VAR:
+  value: "another_value"`
 
 		gt.R1(tmpFile.WriteString(content)).NoError(t)
 		tmpFile.Close()
@@ -61,7 +61,7 @@ value = "another_value"`
 		oldStdout := os.Stdout
 		os.Stdout = w
 
-		args := []string{"zenv", "-t", tmpFile.Name()}
+		args := []string{"zenv", "-c", tmpFile.Name()}
 		err := cli.Run(context.Background(), args)
 
 		// Restore stdout and read captured output
@@ -72,7 +72,7 @@ value = "another_value"`
 		gt.NoError(t, err)
 		gt.S(t, string(output)).Contains("TEST_VAR=test_value")
 		gt.S(t, string(output)).Contains("ANOTHER_VAR=another_value")
-		gt.S(t, string(output)).Contains("[.toml]")
+		gt.S(t, string(output)).Contains("[.yaml]")
 	})
 
 	t.Run("Run with multiple -e options", func(t *testing.T) {
@@ -110,7 +110,7 @@ value = "another_value"`
 		gt.S(t, string(output)).Contains("VAR2=value2")
 	})
 
-	t.Run("Run with both -e and -t options", func(t *testing.T) {
+	t.Run("Run with both -e and -c options", func(t *testing.T) {
 		// Create .env file
 		envFile := gt.R1(os.CreateTemp("", "test*.env")).NoError(t)
 		defer os.Remove(envFile.Name())
@@ -119,21 +119,21 @@ value = "another_value"`
 		gt.R1(envFile.WriteString(envContent)).NoError(t)
 		envFile.Close()
 
-		// Create .toml file
-		tomlFile := gt.R1(os.CreateTemp("", "test*.toml")).NoError(t)
-		defer os.Remove(tomlFile.Name())
+		// Create .yaml file
+		yamlFile := gt.R1(os.CreateTemp("", "test*.yaml")).NoError(t)
+		defer os.Remove(yamlFile.Name())
 
-		tomlContent := `[TOML_VAR]
-value = "toml_value"`
-		gt.R1(tomlFile.WriteString(tomlContent)).NoError(t)
-		tomlFile.Close()
+		yamlContent := `YAML_VAR:
+  value: "yaml_value"`
+		gt.R1(yamlFile.WriteString(yamlContent)).NoError(t)
+		yamlFile.Close()
 
 		// Capture stdout
 		r, w, _ := os.Pipe()
 		oldStdout := os.Stdout
 		os.Stdout = w
 
-		args := []string{"zenv", "-e", envFile.Name(), "-t", tomlFile.Name()}
+		args := []string{"zenv", "-e", envFile.Name(), "-c", yamlFile.Name()}
 		err := cli.Run(context.Background(), args)
 
 		// Restore stdout and read captured output
@@ -143,9 +143,9 @@ value = "toml_value"`
 
 		gt.NoError(t, err)
 		gt.S(t, string(output)).Contains("ENV_VAR=env_value")
-		gt.S(t, string(output)).Contains("TOML_VAR=toml_value")
+		gt.S(t, string(output)).Contains("YAML_VAR=yaml_value")
 		gt.S(t, string(output)).Contains("[.env]")
-		gt.S(t, string(output)).Contains("[.toml]")
+		gt.S(t, string(output)).Contains("[.yaml]")
 	})
 
 	t.Run("Run command execution", func(t *testing.T) {

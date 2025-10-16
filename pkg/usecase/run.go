@@ -133,8 +133,8 @@ func showEnvVars(envVars []*model.EnvVar) {
 			sourceStr = "system"
 		case model.SourceDotEnv:
 			sourceStr = ".env"
-		case model.SourceTOML:
-			sourceStr = ".toml"
+		case model.SourceYAML:
+			sourceStr = ".yaml"
 		case model.SourceInline:
 			sourceStr = "inline"
 		}

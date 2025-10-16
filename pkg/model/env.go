@@ -13,7 +13,7 @@ type EnvSource int
 const (
 	SourceSystem EnvSource = iota
 	SourceDotEnv
-	SourceTOML
+	SourceYAML
 	SourceInline
 )
 

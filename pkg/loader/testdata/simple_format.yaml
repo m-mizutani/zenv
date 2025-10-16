@@ -1,0 +1,5 @@
+# Test file for simple TOML format
+DATABASE_URL: "postgres://localhost/mydb"
+API_KEY: "secret123"
+PORT: "3000"
+ENV: "development"

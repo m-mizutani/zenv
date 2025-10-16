@@ -1,0 +1,2 @@
+FAIL_COMMAND:
+  command: ["false"]

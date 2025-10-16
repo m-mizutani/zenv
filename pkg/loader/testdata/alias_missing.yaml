@@ -1,0 +1,7 @@
+# Test file for alias with non-existent target
+
+MISSING_ALIAS:
+  alias: "NON_EXISTENT_VAR"
+
+ANOTHER_MISSING:
+  alias: "ALSO_DOES_NOT_EXIST"

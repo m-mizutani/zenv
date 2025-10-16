@@ -1,0 +1,18 @@
+# Test inline table format (single line)
+DB_HOST:
+  value: "localhost"
+  profile:
+    dev:
+      value: "localhost"
+    staging:
+      value: "staging-db.example.com"
+    prod:
+      value: "prod-db.example.com"
+
+API_URL:
+  value: "https://api.example.com"
+  profile:
+    dev:
+      value: "http://localhost:8080"
+    prod:
+      value: "https://api.example.com"

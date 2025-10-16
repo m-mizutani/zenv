@@ -1,0 +1,8 @@
+DATABASE_URL:
+  value: "postgresql://localhost/testdb"
+
+API_KEY:
+  value: "secret123"
+
+MULTILINE_CONFIG:
+  value: "line1\nline2\nline3"

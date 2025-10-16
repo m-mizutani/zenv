@@ -1,0 +1,14 @@
+# Test case for alias pointing to template variable
+BASE_VALUE:
+  value: "world"
+
+TEMPLATE_VAR:
+  value: "hello {{ .BASE_VALUE }}"
+  refs: ["BASE_VALUE"]
+
+ALIAS_TO_TEMPLATE:
+  alias: "TEMPLATE_VAR"
+
+# Chain: alias -> alias -> template
+ALIAS_TO_ALIAS:
+  alias: "ALIAS_TO_TEMPLATE"

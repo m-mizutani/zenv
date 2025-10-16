@@ -1,0 +1,23 @@
+# Test for unsetting variables with empty object
+
+DEBUG_FLAG:
+  value: "false"
+  profile:
+    dev:
+      value: "true"
+    prod: null  # Unset in prod profile
+
+VERBOSE_MODE:
+  value: "disabled"
+  profile:
+    dev:
+      value: "enabled"
+    staging:
+      value: "disabled"
+    prod: null  # Unset in prod profile
+
+API_URL:
+  value: "https://api.example.com"
+  profile:
+    dev:
+      value: "http://localhost:8080"
