@@ -1,24 +1,24 @@
 # Migration Guide: zenv v1 to v2
 
-This guide helps you migrate from zenv v1 to v2. **v2 encourages using `.env.toml` files** as the primary configuration format, offering cleaner syntax and more features than traditional `.env` files.
+This guide helps you migrate from zenv v1 to v2. **v2 encourages using `.env.yaml` files** as the primary configuration format, offering cleaner syntax and more features than traditional `.env` files.
 
 ## ⚠️ Important: What's Changed in v2
 
-| Feature | v1 (.env) | v2 (.env.toml) | Migration |
+| Feature | v1 (.env) | v2 (.env.yaml) | Migration |
 |---------|-----------|----------------|-----------|
-| **Basic Variables** | `KEY=value` | `KEY = "value"` | Direct migration |
-| **File Content (`&` prefix)** | `KEY=&/path/file` | `[KEY]`<br>`file = "/path/file"` | Use section format |
-| **Command Execution (backticks)** | `KEY=`\`command\`` | `[KEY]`<br>`command = ["cmd", "arg"]` | Use section format |
+| **Basic Variables** | `KEY=value` | `KEY: "value"` | Direct migration |
+| **File Content (`&` prefix)** | `KEY=&/path/file` | `KEY:`<br>`  file: "/path/file"` | Use object format |
+| **Command Execution (backticks)** | `KEY=`\`command\`` | `KEY:`<br>`  command: ["cmd", "arg"]` | Use object format |
 | **Variable Replacement (`%`)** | `%VAR%` | `{{ .VAR }}` | Use templates or command refs |
 | **Secret Management (Keychain)** | ✅ Built-in | ❌ **Removed** | Use external tools |
 
-## Quick Start: Migrate to .env.toml
+## Quick Start: Migrate to .env.yaml
 
-v2 encourages using `.env.toml` as your primary configuration:
-- **Standard TOML syntax** for simple variables
-- **Section format** for advanced features
+v2 encourages using `.env.yaml` as your primary configuration:
+- **Standard YAML syntax** for simple variables
+- **Object format** for advanced features
 - **Better readability** and maintainability
-- **Type safety** with proper string quoting
+- **Clean, structured format**
 
 ## Migration Examples
 
@@ -32,15 +32,15 @@ API_KEY=secret123
 PORT=3000
 ```
 
-#### v2 (.env.toml) - Recommended
-```toml
-POSTGRES_DB = "dev_db"
-POSTGRES_USER = "testuser"
-API_KEY = "secret123"
-PORT = "3000"
+#### v2 (.env.yaml) - Recommended
+```yaml
+POSTGRES_DB: "dev_db"
+POSTGRES_USER: "testuser"
+API_KEY: "secret123"
+PORT: "3000"
 ```
 
-**✅ Migration**: Simply add quotes and use TOML syntax.
+**✅ Migration**: Use YAML key-value syntax with colons.
 
 ### File Content Loading
 
@@ -50,13 +50,13 @@ SECRET_KEY=&/path/to/secret.txt
 SSL_CERT=&/etc/ssl/cert.pem
 ```
 
-#### v2 (.env.toml)
-```toml
-[SECRET_KEY]
-file = "/path/to/secret.txt"
+#### v2 (.env.yaml)
+```yaml
+SECRET_KEY:
+  file: "/path/to/secret.txt"
 
-[SSL_CERT]
-file = "/etc/ssl/cert.pem"
+SSL_CERT:
+  file: "/etc/ssl/cert.pem"
 ```
 
 ### Command Execution
@@ -67,13 +67,13 @@ GIT_HASH=`git rev-parse HEAD`
 BUILD_DATE=`date +%Y%m%d`
 ```
 
-#### v2 (.env.toml)
-```toml
-[GIT_HASH]
-command = ["git", "rev-parse", "HEAD"]
+#### v2 (.env.yaml)
+```yaml
+GIT_HASH:
+  command: ["git", "rev-parse", "HEAD"]
 
-[BUILD_DATE]
-command = ["date", "+%Y%m%d"]
+BUILD_DATE:
+  command: ["date", "+%Y%m%d"]
 ```
 
 ### Variable Replacement
@@ -83,15 +83,15 @@ command = ["date", "+%Y%m%d"]
 DATABASE_URL=postgresql://%DB_USER%:%DB_PASS%@%DB_HOST%/mydb
 ```
 
-#### v2 (.env.toml with templates)
-```toml
-DB_USER = "admin"
-DB_PASS = "secret"
-DB_HOST = "localhost"
+#### v2 (.env.yaml with templates)
+```yaml
+DB_USER: "admin"
+DB_PASS: "secret"
+DB_HOST: "localhost"
 
-[DATABASE_URL]
-value = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}/mydb"
-refs = ["DB_USER", "DB_PASS", "DB_HOST"]
+DATABASE_URL:
+  value: "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}/mydb"
+  refs: ["DB_USER", "DB_PASS", "DB_HOST"]
 ```
 
 ### Secret Management
@@ -103,10 +103,10 @@ AWS_SECRET_ACCESS_KEY=%@aws.AWS_SECRET_ACCESS_KEY  # in .env
 ```
 
 #### v2 (Use External Tools)
-```toml
+```yaml
 # Load from external secret manager or file
-[AWS_SECRET_ACCESS_KEY]
-file = "/run/secrets/aws_key"  # Docker secrets, K8s secrets, etc.
+AWS_SECRET_ACCESS_KEY:
+  file: "/run/secrets/aws_key"  # Docker secrets, K8s secrets, etc.
 ```
 
 **❌ Migration**: Use external secret management (Vault, AWS Secrets Manager, K8s Secrets)
@@ -123,15 +123,15 @@ go install github.com/m-mizutani/zenv/v2@latest
 
 ## File Format Recommendation
 
-While v2 still supports `.env` files, **we recommend migrating to `.env.toml`**:
+While v2 still supports `.env` files, **we recommend migrating to `.env.yaml`**:
 
 ```bash
 # Rename your file
-mv .env .env.toml
+mv .env .env.yaml
 
-# Update the syntax (add quotes to values)
+# Update the syntax (use YAML format)
 # Before: KEY=value
-# After:  KEY = "value"
+# After:  KEY: "value"
 ```
 
 ## Command Usage
@@ -140,11 +140,11 @@ mv .env .env.toml
 # v1 (loads .env)
 zenv myapp
 
-# v2 (loads .env.toml) - Recommended
-zenv myapp  # Auto-loads .env.toml if present
+# v2 (loads .env.yaml) - Recommended
+zenv myapp  # Auto-loads .env.yaml if present
 
 # v2 with explicit file
-zenv -t config.toml myapp
+zenv -c config.yaml myapp
 ```
 
 ## Complete Migration Example
@@ -163,68 +163,68 @@ DATABASE_URL=postgresql://%DB_USER%:%DB_PASSWORD%@localhost/mydb
 DB_USER=admin
 ```
 
-### v2 Project (.env.toml) - Recommended
-```toml
-# Simple variables (one-liners)
-APP_NAME = "myapp"
-PORT = "3000"
-DEBUG = "true"
-DB_USER = "admin"
+### v2 Project (.env.yaml) - Recommended
+```yaml
+# Simple variables
+APP_NAME: "myapp"
+PORT: "3000"
+DEBUG: "true"
+DB_USER: "admin"
 
 # File loading
-[DB_PASSWORD]
-file = "/secrets/db.txt"
+DB_PASSWORD:
+  file: "/secrets/db.txt"
 
 # Command execution
-[GIT_HASH]
-command = ["git", "rev-parse", "--short", "HEAD"]
+GIT_HASH:
+  command: ["git", "rev-parse", "--short", "HEAD"]
 
 # Template for complex values
-[DATABASE_URL]
-value = "postgresql://{{ .DB_USER }}:{{ .DB_PASSWORD }}@localhost/mydb"
-refs = ["DB_USER", "DB_PASSWORD"]
+DATABASE_URL:
+  value: "postgresql://{{ .DB_USER }}:{{ .DB_PASSWORD }}@localhost/mydb"
+  refs: ["DB_USER", "DB_PASSWORD"]
 ```
 
 ## Additional Features
 
 ### Aliases (Reference Other Variables)
-```toml
-# One-liner for primary DB
-PRIMARY_DB = "postgresql://primary.db.com/myapp"
+```yaml
+# Define primary DB
+PRIMARY_DB: "postgresql://primary.db.com/myapp"
 
 # Create an alias
-[DATABASE_URL]
-alias = "PRIMARY_DB"
+DATABASE_URL:
+  alias: "PRIMARY_DB"
 ```
 
 ### Templates (Combine Variables)
-```toml
-# Define components as one-liners
-DB_USER = "admin"
-DB_HOST = "localhost"
+```yaml
+# Define components
+DB_USER: "admin"
+DB_HOST: "localhost"
 
 # Combine with template
-[DATABASE_URL]
-value = "postgresql://{{ .DB_USER }}@{{ .DB_HOST }}/myapp"
-refs = ["DB_USER", "DB_HOST"]
+DATABASE_URL:
+  value: "postgresql://{{ .DB_USER }}@{{ .DB_HOST }}/myapp"
+  refs: ["DB_USER", "DB_HOST"]
 ```
 
 ### Conditional Configuration
-```toml
-USE_STAGING = "true"
+```yaml
+USE_STAGING: "true"
 
-[API_ENDPOINT]
-value = "{{ if .USE_STAGING }}https://staging.api.example.com{{ else }}https://api.example.com{{ end }}"
-refs = ["USE_STAGING"]
+API_ENDPOINT:
+  value: "{{ if .USE_STAGING }}https://staging.api.example.com{{ else }}https://api.example.com{{ end }}"
+  refs: ["USE_STAGING"]
 ```
 
 ## Migration Checklist
 
 1. ☐ Install v2: `go install github.com/m-mizutani/zenv/v2@latest`
-2. ☐ Rename `.env` to `.env.toml`
-3. ☐ Add quotes to all values: `KEY=value` → `KEY = "value"`
-4. ☐ Convert file loading: `KEY=&/path` → `[KEY] file = "/path"`
-5. ☐ Convert commands: `KEY=`\`cmd arg\`` → `[KEY] command = ["cmd", "arg"]`
+2. ☐ Rename `.env` to `.env.yaml`
+3. ☐ Update syntax: `KEY=value` → `KEY: "value"`
+4. ☐ Convert file loading: `KEY=&/path` → `KEY:\n  file: "/path"`
+5. ☐ Convert commands: `KEY=`\`cmd arg\`` → `KEY:\n  command: ["cmd", "arg"]`
 6. ☐ Convert templates: `%VAR%` → `{{ .VAR }}`
 7. ☐ Test: `zenv myapp`
 
@@ -268,9 +268,9 @@ Expected output order (inline_value should be used):
 TEST_VAR=inline_value [inline]
 ```
 
-### Step 4: Consider TOML Migration (Optional)
+### Step 4: Consider YAML Migration (Optional)
 
-For complex configurations, consider migrating to TOML:
+For complex configurations, consider migrating to YAML:
 
 #### Before (.env)
 ```env
@@ -279,16 +279,15 @@ API_KEY_FILE=/path/to/api/key
 GIT_COMMIT=$(git rev-parse HEAD)
 ```
 
-#### After (.env.toml)
-```toml
-[DATABASE_URL]
-value = "postgresql://localhost/mydb"
+#### After (.env.yaml)
+```yaml
+DATABASE_URL: "postgresql://localhost/mydb"
 
-[API_KEY]
-file = "/path/to/api/key"
+API_KEY:
+  file: "/path/to/api/key"
 
-[GIT_COMMIT]
-command = ["git", "rev-parse", "HEAD"]
+GIT_COMMIT:
+  command: ["git", "rev-parse", "HEAD"]
 ```
 
 ### Step 5: Update Scripts and CI/CD
@@ -300,7 +299,7 @@ Update any scripts or CI/CD configurations:
 zenv -e .env.production deploy.sh
 
 # After (same command, but new features available)
-zenv -e .env.production -t config.toml deploy.sh
+zenv -e .env.production -c config.yaml deploy.sh
 ```
 
 ## Real-World Migration Scenarios
@@ -341,27 +340,27 @@ DATABASE_URL=postgresql://%DB_USER%:%DB_PASS%@%DB_HOST%:5432/myapp
 
 **v2 Migration Options:**
 
-#### Option A: Migrate to TOML
+#### Option A: Migrate to YAML
 ```bash
 # .env (keep simple values)
 API_BASE_URL=https://api.myapp.com
 
-# .env.toml (migrate complex values)
-[SECRET_KEY]
-file = "/etc/myapp/secret.key"
+# .env.yaml (migrate complex values)
+SECRET_KEY:
+  file: "/etc/myapp/secret.key"
 
-[GIT_COMMIT]
-command = ["git", "rev-parse", "HEAD"]
+GIT_COMMIT:
+  command: ["git", "rev-parse", "HEAD"]
 
 # Variable replacement with template
-[DATABASE_PASSWORD]
-value = "{{ .VAULT_DATABASE_PASS }}"
-refs = ["VAULT_DATABASE_PASS"]
+DATABASE_PASSWORD:
+  value: "{{ .VAULT_DATABASE_PASS }}"
+  refs: ["VAULT_DATABASE_PASS"]
 
 # Complex variable replacement
-[DATABASE_URL]
-value = "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:5432/myapp"
-refs = ["DB_USER", "DB_PASS", "DB_HOST"]
+DATABASE_URL:
+  value: "postgresql://{{ .DB_USER }}:{{ .DB_PASS }}@{{ .DB_HOST }}:5432/myapp"
+  refs: ["DB_USER", "DB_PASS", "DB_HOST"]
 ```
 
 #### Option B: Use shell expansion (alternative)
@@ -401,18 +400,18 @@ DATABASE_URL=postgresql://user:password@localhost/db
 zenv -e .env myapp
 ```
 
-#### Option B: File-Based Secrets  
+#### Option B: File-Based Secrets
 ```bash
 # Store secrets in files (ensure proper permissions)
 echo "secret_password" > /etc/myapp/db_password  # chmod 600
 echo "api_key_value" > /etc/myapp/api_key       # chmod 600
 
-# .env.toml
-[DATABASE_PASSWORD]
-file = "/etc/myapp/db_password"
+# .env.yaml
+DATABASE_PASSWORD:
+  file: "/etc/myapp/db_password"
 
-[API_KEY]
-file = "/etc/myapp/api_key"
+API_KEY:
+  file: "/etc/myapp/api_key"
 ```
 
 #### Option C: Keep Using v1 for Secret Management
@@ -444,14 +443,14 @@ zenv -e .env docker build -t myapp:$DOCKER_TAG .
 export BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 export DOCKER_TAG="${GIT_BRANCH}-$(git rev-parse --short HEAD)"
 
-# .env.toml (for command-based values)
-[GIT_BRANCH]
-command = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+# .env.yaml (for command-based values)
+GIT_BRANCH:
+  command: ["git", "rev-parse", "--abbrev-ref", "HEAD"]
 
 # Use external secret management for CI
 export SECRET_TOKEN=$CI_SECRET_TOKEN  # from CI environment
 
-zenv -e .env -t .env.toml docker build -t myapp:$DOCKER_TAG .
+zenv -e .env -c .env.yaml docker build -t myapp:$DOCKER_TAG .
 ```
 
 #### Option B: Pure Shell Approach
@@ -477,43 +476,47 @@ zenv -e .env docker build -t myapp:$DOCKER_TAG .
 **Solution**: Check the new precedence order and use `zenv` without a command to inspect loaded variables.
 
 ```bash
-zenv -e .env -t config.toml
+zenv -e .env -c config.yaml
 ```
 
-### Issue: Command Execution in TOML Not Working
+### Issue: Command Execution in YAML Not Working
 
-**Solution**: Ensure proper TOML syntax for commands:
+**Solution**: Ensure proper YAML syntax for commands:
 
-```toml
-# Correct - command as array
-[GIT_BRANCH]
-command = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+```yaml
+# Correct - command as array (inline format recommended)
+GIT_BRANCH:
+  command: ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+
+# Also correct - multi-line array format
+GIT_BRANCH:
+  command:
+    - git
+    - rev-parse
+    - --abbrev-ref
+    - HEAD
 
 # Incorrect - command as string
-[GIT_BRANCH]
-command = "git rev-parse --abbrev-ref HEAD"
+GIT_BRANCH:
+  command: "git rev-parse --abbrev-ref HEAD"
 ```
 
 ### Issue: File Loading Not Working
 
 **Solution**: Check file paths and permissions:
 
-```toml
-[SECRET]
-file = "/absolute/path/to/file"  # Use absolute paths
-
-# or
-
-SECRET.file = "/absolute/path/to/file"  # Use absolute paths
+```yaml
+SECRET:
+  file: "/absolute/path/to/file"  # Use absolute paths
 ```
 
 ## Best Practices for v2
 
-1. **Use TOML for complex configurations** that need file reading or command execution
+1. **Use YAML for complex configurations** that need file reading or command execution
 2. **Keep .env for simple key-value pairs** that don't change often
 3. **Use inline variables** for one-off overrides
 4. **Test precedence** by running `zenv` without a command to see all variables
-5. **Use descriptive TOML section names** that clearly indicate the variable purpose
+5. **Use descriptive variable names** that clearly indicate their purpose
 
 ## Getting Help
 
@@ -530,10 +533,10 @@ Use this decision matrix to determine if v2 is right for you:
 
 ### ✅ **Migrate to v2 if you:**
 - Use only basic .env files with simple KEY=value pairs
-- Want better TOML configuration support with structured settings
+- Want better YAML configuration support with structured settings
 - Need clear environment variable precedence
 - Can migrate variable replacement (`%VARIABLE`) to Go templates
-- Can migrate file loading (`&` prefix) and command execution (backticks) to TOML
+- Can migrate file loading (`&` prefix) and command execution (backticks) to YAML
 - Don't require built-in macOS Keychain integration
 
 ### ❌ **Stay with v1 if you:**
@@ -557,7 +560,7 @@ v1 continues to be maintained and remains suitable for:
 
 **There's no requirement to migrate.** Choose the version that best fits your workflow:
 - **v1**: For projects requiring built-in secret management and established workflows
-- **v2**: For configuration-driven environments with TOML support and template capabilities
+- **v2**: For configuration-driven environments with YAML support and template capabilities
 
 For additional support, see:
 - [v1 Documentation](https://github.com/m-mizutani/zenv/blob/main/README.md) for v1 features

@@ -1,0 +1,13 @@
+# Test inline string format for profile values
+EMAIL:
+  value: "default@example.com"
+  profile:
+    dev: "dev@example.com"
+    staging: "staging@example.com"
+    prod: "prod@example.com"
+
+API_KEY:
+  value: "default-key"
+  profile:
+    dev: "dev-key-123"
+    prod: "prod-key-456"

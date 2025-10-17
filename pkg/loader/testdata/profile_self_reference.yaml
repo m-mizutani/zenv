@@ -1,0 +1,6 @@
+# Test profile functionality with API_TOKEN
+API_TOKEN:
+  value: "default-token"
+  profile:
+    dev:
+      value: "dev-token"

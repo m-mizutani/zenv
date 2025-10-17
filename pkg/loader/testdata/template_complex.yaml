@@ -1,0 +1,64 @@
+# Complex template scenarios
+
+# Template with empty references
+EMPTY_VAR:
+  value: ""
+
+WITH_EMPTY:
+  value: "Value: [{{ .EMPTY_VAR }}]"
+  refs: ["EMPTY_VAR"]
+
+# Template with system environment variable
+SYSTEM_VAR_TEMPLATE:
+  value: "Path: {{ .PATH }}"
+  refs: ["PATH"]
+
+# Template with non-existent reference - this variable was removed
+# as it now causes an error instead of returning empty string
+
+# Template with range iteration
+ITEM_1:
+  value: "apple"
+
+ITEM_2:
+  value: "banana"
+
+ITEM_3:
+  value: "cherry"
+
+# Template with complex logic
+DEBUG_MODE:
+  value: "true"
+
+LOG_LEVEL:
+  value: "info"
+
+LOG_CONFIG:
+  value: "{{ if eq .DEBUG_MODE \"true\" }}debug{{ else }}{{ .LOG_LEVEL }}{{ end }}"
+  refs: ["DEBUG_MODE", "LOG_LEVEL"]
+
+# Nested template references
+BASE_URL:
+  value: "https://api.example.com"
+
+API_VERSION:
+  value: "v2"
+
+API_PATH:
+  value: "{{ .BASE_URL }}/{{ .API_VERSION }}"
+  refs: ["BASE_URL", "API_VERSION"]
+
+FULL_ENDPOINT:
+  value: "{{ .API_PATH }}/users"
+  refs: ["API_PATH"]
+
+# Template with string manipulation
+USERNAME:
+  value: "john_doe"
+
+DOMAIN:
+  value: "example.com"
+
+EMAIL:
+  value: "{{ .USERNAME }}@{{ .DOMAIN }}"
+  refs: ["USERNAME", "DOMAIN"]

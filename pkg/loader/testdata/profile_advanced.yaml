@@ -1,0 +1,50 @@
+# Test advanced features with profiles
+
+SSL_CERT:
+  file: "testdata/config_content.txt"
+  profile:
+    dev:
+      value: "-----BEGIN CERTIFICATE-----\ndev-cert-content\n-----END CERTIFICATE-----"
+    prod:
+      file: "testdata/config_content.txt"
+
+HOSTNAME:
+  command: ["echo", "default-host"]
+  profile:
+    dev:
+      value: "dev-server"
+    staging:
+      command: ["echo", "staging-server"]
+    prod:
+      command: ["echo", "prod-server"]
+
+API_KEY:
+  alias: "PRIMARY_DB"
+  profile:
+    dev:
+      value: "dev-api-key-12345"
+    prod:
+      alias: "SECONDARY_DB"
+
+# Referenced by API_KEY alias
+PRIMARY_DB:
+  value: "postgres://localhost/primary"
+
+SECONDARY_DB:
+  value: "postgres://localhost/secondary"
+
+CONFIG_PATH:
+  value: "/etc/{{.ENV}}/config.yml"
+  refs: ["ENV"]
+  profile:
+    dev:
+      value: "/home/dev/config.yml"
+    prod:
+      value: "/opt/{{.ENV}}/{{.APP}}/config.yml"
+      refs: ["ENV", "APP"]
+
+ENV:
+  value: "default"
+
+APP:
+  value: "myapp"

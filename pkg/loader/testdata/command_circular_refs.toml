@@ -1,9 +1,0 @@
-# Test circular reference detection with command refs
-
-[A]
-command = ["echo", "{{.B}}"]
-refs = ["B"]
-
-[B]
-command = ["echo", "{{.A}}"]
-refs = ["A"]

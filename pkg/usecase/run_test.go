@@ -120,7 +120,7 @@ func TestUseCase(t *testing.T) {
 
 		loader2 := func(ctx context.Context) ([]*model.EnvVar, error) {
 			return []*model.EnvVar{
-				{Name: "LOADER2_VAR", Value: "loader2_value", Source: model.SourceTOML},
+				{Name: "LOADER2_VAR", Value: "loader2_value", Source: model.SourceYAML},
 			}, nil
 		}
 

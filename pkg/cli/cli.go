@@ -100,15 +100,15 @@ func Run(ctx context.Context, args []string) error {
 			IsSlice: true,
 		},
 		{
-			Name:    "toml",
-			Aliases: []string{"t"},
-			Usage:   "Load environment variables from .toml file",
+			Name:    "config",
+			Aliases: []string{"c"},
+			Usage:   "Load environment variables from .yaml file",
 			IsSlice: true,
 		},
 		{
 			Name:    "profile",
 			Aliases: []string{"p"},
-			Usage:   "Select profile from TOML configuration",
+			Usage:   "Select profile from YAML configuration",
 		},
 		{
 			Name:         "log-level",
@@ -140,7 +140,7 @@ func Run(ctx context.Context, args []string) error {
 
 	// Extract parsed values
 	envFiles := result.Options["env"].StringSlice()
-	tomlFiles := result.Options["toml"].StringSlice()
+	configFiles := result.Options["config"].StringSlice()
 	logLevel := result.Options["log-level"].String()
 	profile := result.Options["profile"].String()
 	commandArgs := result.Args
@@ -152,7 +152,7 @@ func Run(ctx context.Context, args []string) error {
 	// Set logger in context for propagation
 	ctx = ctxlog.With(ctx, logger)
 
-	// Collect environment variables in order for TOML loader reference
+	// Collect environment variables in order for YAML loader reference
 	var allExistingVars []*model.EnvVar
 
 	// First, collect system environment variables
@@ -189,13 +189,13 @@ func Run(ctx context.Context, args []string) error {
 	}
 	allExistingVars = append(allExistingVars, loadedDotEnvVars...)
 
-	// Now create TOML loaders with all existing variables and profile
-	var tomlLoaders []loader.LoadFunc
-	for _, tomlFile := range tomlFiles {
-		tomlLoaders = append(tomlLoaders, loader.NewTOMLLoaderWithProfile(tomlFile, profile, allExistingVars))
+	// Now create YAML loaders with all existing variables and profile
+	var yamlLoaders []loader.LoadFunc
+	for _, configFile := range configFiles {
+		yamlLoaders = append(yamlLoaders, loader.NewYAMLLoaderWithProfile(configFile, profile, allExistingVars))
 	}
-	if len(tomlFiles) == 0 {
-		tomlLoaders = append(tomlLoaders, loader.NewTOMLLoaderWithProfile(".env.toml", profile, allExistingVars))
+	if len(configFiles) == 0 {
+		yamlLoaders = append(yamlLoaders, loader.NewYAMLLoaderWithProfile(".env.yaml", profile, allExistingVars))
 	}
 
 	// Combine all loaders for the usecase
@@ -204,7 +204,7 @@ func Run(ctx context.Context, args []string) error {
 	loaders = append(loaders, func(ctx context.Context) ([]*model.EnvVar, error) {
 		return loadedDotEnvVars, nil
 	})
-	loaders = append(loaders, tomlLoaders...)
+	loaders = append(loaders, yamlLoaders...)
 
 	// Create executor and usecase
 	exec := executor.NewDefaultExecutor()
