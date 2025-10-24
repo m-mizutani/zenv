@@ -95,13 +95,15 @@ $ zenv -e production.env psql
 
 ### Load from YAML configuration files
 
+Both `.env.yaml` and `.env.yml` file extensions are supported. If both files exist, they will be automatically merged.
+
 ```sh
 $ cat .env.yaml
 DATABASE_URL: "postgresql://localhost/mydb"
 PORT: "3000"
 
 $ zenv -c .env.yaml myapp
-# myapp runs with DATABASE_URL and PORT set from .env.yaml
+# myapp runs with DATABASE_URL and PORT set from .env.yaml (or .env.yml)
 ```
 
 ### Multiple files and precedence
