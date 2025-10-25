@@ -1344,3 +1344,350 @@ func TestProfileNilHandling(t *testing.T) {
 		gt.Equal(t, varMap["API_URL"], "https://api.example.com")
 	})
 }
+
+func TestYAMLFileExtensions(t *testing.T) {
+	t.Run("Load .env.yml file only", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+		ymlContent := `
+DATABASE_URL: "postgres://localhost/testdb"
+API_KEY: "secret123"
+`
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		loadFunc := loader.NewYAMLLoader(filepath.Join(tmpDir, ".env.yaml"))
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 2)
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		gt.Equal(t, varMap["DATABASE_URL"], "postgres://localhost/testdb")
+		gt.Equal(t, varMap["API_KEY"], "secret123")
+	})
+
+	t.Run("Load .env.yaml file only", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		yamlContent := `
+DATABASE_URL: "postgres://localhost/yamldb"
+API_KEY: "yaml-secret"
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 2)
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		gt.Equal(t, varMap["DATABASE_URL"], "postgres://localhost/yamldb")
+		gt.Equal(t, varMap["API_KEY"], "yaml-secret")
+	})
+
+	t.Run("Merge both files with different keys", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+
+		yamlContent := `
+DATABASE_URL: "postgres://localhost/db"
+API_KEY: "key123"
+`
+		ymlContent := `
+REDIS_URL: "redis://localhost:6379"
+LOG_LEVEL: "info"
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 4)
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		gt.Equal(t, varMap["DATABASE_URL"], "postgres://localhost/db")
+		gt.Equal(t, varMap["API_KEY"], "key123")
+		gt.Equal(t, varMap["REDIS_URL"], "redis://localhost:6379")
+		gt.Equal(t, varMap["LOG_LEVEL"], "info")
+	})
+
+	t.Run("Merge both files: value+refs already in .yaml", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+
+		// Simple case: .yaml has complete config, .yml has other vars
+		yamlContent := `
+DB_USER: "admin"
+DB_PASS: "secret"
+DB_URL:
+  value: "postgres://{{ .DB_USER }}:{{ .DB_PASS }}@localhost/db"
+  refs: ["DB_USER", "DB_PASS"]
+`
+		ymlContent := `
+REDIS_URL: "redis://localhost:6379"
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		gt.Equal(t, varMap["DB_URL"], "postgres://admin:secret@localhost/db")
+	})
+
+	t.Run("Merge both files: refs merging from both", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+
+		yamlContent := `
+VAR1: "value1"
+VAR2: "value2"
+VAR3: "value3"
+TEMPLATE:
+  value: "{{ .VAR1 }} {{ .VAR2 }} {{ .VAR3 }}"
+  refs: ["VAR1", "VAR2"]
+`
+		ymlContent := `
+TEMPLATE:
+  refs: ["VAR2", "VAR3"]
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		// Should merge refs and execute template correctly
+		gt.Equal(t, varMap["TEMPLATE"], "value1 value2 value3")
+	})
+
+	t.Run("Merge both files: profile merging", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+
+		yamlContent := `
+API_URL:
+  value: "https://api.example.com"
+  profile:
+    dev:
+      value: "http://localhost:8080"
+`
+		ymlContent := `
+API_URL:
+  profile:
+    staging:
+      value: "https://staging.example.com"
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		// Test dev profile
+		loadFuncDev := loader.NewYAMLLoaderWithProfile(yamlPath, "dev", nil)
+		envVarsDev := gt.R1(loadFuncDev(context.Background())).NoError(t)
+		gt.Equal(t, envVarsDev[0].Value, "http://localhost:8080")
+
+		// Test staging profile
+		loadFuncStaging := loader.NewYAMLLoaderWithProfile(yamlPath, "staging", nil)
+		envVarsStaging := gt.R1(loadFuncStaging(context.Background())).NoError(t)
+		gt.Equal(t, envVarsStaging[0].Value, "https://staging.example.com")
+
+		// Test default profile
+		loadFuncDefault := loader.NewYAMLLoaderWithProfile(yamlPath, "", nil)
+		envVarsDefault := gt.R1(loadFuncDefault(context.Background())).NoError(t)
+		gt.Equal(t, envVarsDefault[0].Value, "https://api.example.com")
+	})
+
+	t.Run("Merge both files: .yml profile overrides .yaml profile", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+
+		yamlContent := `
+API_URL:
+  value: "https://api.example.com"
+  profile:
+    dev:
+      value: "http://localhost:8080"
+`
+		ymlContent := `
+API_URL:
+  profile:
+    dev:
+      value: "http://localhost:9090"
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		loadFunc := loader.NewYAMLLoaderWithProfile(yamlPath, "dev", nil)
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+		gt.Equal(t, envVars[0].Value, "http://localhost:9090")
+	})
+
+	t.Run("Error: conflicting value fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+
+		yamlContent := `
+DATABASE_URL:
+  value: "postgres://localhost/db1"
+`
+		ymlContent := `
+DATABASE_URL:
+  value: "postgres://localhost/db2"
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		_, err := loadFunc(context.Background())
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("conflicting field \"value\"")
+		gt.S(t, err.Error()).Contains("DATABASE_URL")
+	})
+
+	t.Run("Error: conflicting file fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+
+		yamlContent := `
+SSL_CERT:
+  file: "/path/to/cert1.pem"
+`
+		ymlContent := `
+SSL_CERT:
+  file: "/path/to/cert2.pem"
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		_, err := loadFunc(context.Background())
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("conflicting field \"file\"")
+		gt.S(t, err.Error()).Contains("SSL_CERT")
+	})
+
+	t.Run("Error: conflicting command fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+
+		yamlContent := `
+HOSTNAME:
+  command: ["echo", "host1"]
+`
+		ymlContent := `
+HOSTNAME:
+  command: ["echo", "host2"]
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		_, err := loadFunc(context.Background())
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("conflicting field \"command\"")
+		gt.S(t, err.Error()).Contains("HOSTNAME")
+	})
+
+	t.Run("Error: conflicting alias fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+
+		yamlContent := `
+PRIMARY_DB: "postgres://localhost/primary"
+DB_URL:
+  alias: "PRIMARY_DB"
+`
+		ymlContent := `
+SECONDARY_DB: "postgres://localhost/secondary"
+DB_URL:
+  alias: "SECONDARY_DB"
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		_, err := loadFunc(context.Background())
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("conflicting field \"alias\"")
+		gt.S(t, err.Error()).Contains("DB_URL")
+	})
+
+	t.Run("No files exist returns nil", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+		gt.Nil(t, envVars)
+	})
+
+	t.Run("Load .yml file by passing .yml path directly", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+		ymlContent := `DATABASE_URL: "postgres://localhost/testdb"
+API_KEY: "secret123"`
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		// Pass .yml path directly - should not try to load the same file twice
+		loadFunc := loader.NewYAMLLoader(ymlPath)
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 2)
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		gt.Equal(t, varMap["DATABASE_URL"], "postgres://localhost/testdb")
+		gt.Equal(t, varMap["API_KEY"], "secret123")
+	})
+
+	t.Run("Load .yaml file by passing .yaml path directly", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		yamlContent := `DATABASE_URL: "postgres://localhost/yamldb"
+PORT: "8080"`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+
+		// Pass .yaml path directly
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 2)
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		gt.Equal(t, varMap["DATABASE_URL"], "postgres://localhost/yamldb")
+		gt.Equal(t, varMap["PORT"], "8080")
+	})
+}

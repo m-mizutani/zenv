@@ -3,8 +3,10 @@ package loader
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -21,23 +23,16 @@ func NewYAMLLoader(path string, existingVars ...[]*model.EnvVar) LoadFunc {
 func NewYAMLLoaderWithProfile(path string, profile string, existingVars ...[]*model.EnvVar) LoadFunc {
 	return func(ctx context.Context) ([]*model.EnvVar, error) {
 		logger := ctxlog.From(ctx)
-		logger.Debug("loading YAML file", "path", path)
 
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			logger.Debug("YAML file not found", "path", path)
-			return nil, nil // File not found is acceptable
-		}
-
-		data, err := os.ReadFile(path) // #nosec G304 - file path is user provided and expected
+		// Load both .env.yaml and .env.yml if they exist
+		config, err := loadAndMergeYAMLFiles(ctx, path)
 		if err != nil {
-			logger.Error("failed to read YAML file", "path", path, "error", err)
-			return nil, goerr.Wrap(err, "failed to read YAML file", goerr.V("path", path))
+			return nil, err
 		}
 
-		var config model.YAMLConfig
-		if err := yaml.Unmarshal(data, &config); err != nil {
-			logger.Error("failed to parse YAML file", "path", path, "error", err)
-			return nil, goerr.Wrap(err, "failed to parse YAML file", goerr.V("path", path))
+		if config == nil {
+			// No YAML files found
+			return nil, nil
 		}
 
 		// Merge existing variables if provided
@@ -85,6 +80,204 @@ func NewYAMLLoaderWithProfile(path string, profile string, existingVars ...[]*mo
 		logger.Debug("loaded YAML file", "path", path, "variables", len(envVars))
 		return envVars, nil
 	}
+}
+
+// loadAndMergeYAMLFiles loads both .env.yaml and .env.yml if they exist and merges them
+func loadAndMergeYAMLFiles(ctx context.Context, path string) (model.YAMLConfig, error) {
+	logger := ctxlog.From(ctx)
+
+	// Helper function to load a single YAML file
+	loadOneFile := func(filePath string) (model.YAMLConfig, bool, error) {
+		if _, err := os.Stat(filePath); err != nil {
+			if os.IsNotExist(err) {
+				return nil, false, nil // File not found is acceptable
+			}
+			return nil, false, goerr.Wrap(err, "failed to check YAML file", goerr.V("path", filePath))
+		}
+
+		logger.Debug("loading YAML file", "path", filePath)
+		data, err := os.ReadFile(filePath) // #nosec G304 - file path is user provided and expected
+		if err != nil {
+			logger.Error("failed to read YAML file", "path", filePath, "error", err)
+			return nil, false, goerr.Wrap(err, "failed to read YAML file", goerr.V("path", filePath))
+		}
+
+		var config model.YAMLConfig
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			logger.Error("failed to parse YAML file", "path", filePath, "error", err)
+			return nil, false, goerr.Wrap(err, "failed to parse YAML file", goerr.V("path", filePath))
+		}
+
+		return config, true, nil
+	}
+
+	// Determine base path and construct both .yaml and .yml paths
+	base := path
+	ext := filepath.Ext(path)
+	if ext == ".yaml" || ext == ".yml" {
+		base = strings.TrimSuffix(path, ext)
+	}
+	yamlPath := base + ".yaml"
+	ymlPath := base + ".yml"
+
+	// Load .env.yaml
+	config1, found1, err1 := loadOneFile(yamlPath)
+	if err1 != nil {
+		return nil, err1
+	}
+
+	// Load .env.yml (only if it's a different file)
+	var config2 model.YAMLConfig
+	var found2 bool
+	if yamlPath != ymlPath {
+		var err2 error
+		config2, found2, err2 = loadOneFile(ymlPath)
+		if err2 != nil {
+			return nil, err2
+		}
+	}
+
+	// If neither file exists, return nil
+	if !found1 && !found2 {
+		logger.Debug("no YAML files found", "yaml_path", yamlPath, "yml_path", ymlPath)
+		return nil, nil
+	}
+
+	// If only one file exists, return it
+	if !found1 {
+		logger.Debug("loaded YAML file", "path", ymlPath, "variables", len(config2))
+		return config2, nil
+	}
+	if !found2 || yamlPath == ymlPath {
+		logger.Debug("loaded YAML file", "path", yamlPath, "variables", len(config1))
+		return config1, nil
+	}
+
+	// Both files exist - merge them with conflict detection
+	logger.Debug("merging YAML files", "yaml_path", yamlPath, "yml_path", ymlPath)
+	merged, err := mergeYAMLConfigs(config1, config2)
+	if err != nil {
+		return nil, goerr.Wrap(err, "failed to merge YAML configurations")
+	}
+
+	logger.Debug("merged YAML files", "variables", len(merged))
+	return merged, nil
+}
+
+// mergeYAMLConfigs merges two YAML configurations with field-level conflict detection
+func mergeYAMLConfigs(config1, config2 model.YAMLConfig) (model.YAMLConfig, error) {
+	result := make(model.YAMLConfig)
+
+	// Copy all entries from config1
+	for key, value := range config1 {
+		result[key] = value
+	}
+
+	// Merge entries from config2
+	for key, value2 := range config2 {
+		if value1, exists := result[key]; exists {
+			// Key exists in both configs - check for field-level conflicts
+			merged, err := mergeYAMLValues(key, value1, value2)
+			if err != nil {
+				return nil, err
+			}
+			result[key] = merged
+		} else {
+			// Key only exists in config2
+			result[key] = value2
+		}
+	}
+
+	return result, nil
+}
+
+// mergeYAMLValues merges two YAMLValue instances with conflict detection
+func mergeYAMLValues(key string, v1, v2 model.YAMLValue) (model.YAMLValue, error) {
+	// Check for value source conflicts (value, file, command, alias)
+	v1HasValueSource := v1.Value != nil || v1.File != nil || len(v1.Command) > 0 || v1.Alias != nil
+	v2HasValueSource := v2.Value != nil || v2.File != nil || len(v2.Command) > 0 || v2.Alias != nil
+
+	if v1HasValueSource && v2HasValueSource {
+		// Both have value sources - check if they conflict
+		if v1.Value != nil && v2.Value != nil {
+			return model.YAMLValue{}, goerr.New(
+				fmt.Sprintf("conflicting field \"value\" for environment variable \"%s\" found in both .env.yaml and .env.yml", key),
+			)
+		}
+		if v1.File != nil && v2.File != nil {
+			return model.YAMLValue{}, goerr.New(
+				fmt.Sprintf("conflicting field \"file\" for environment variable \"%s\" found in both .env.yaml and .env.yml", key),
+			)
+		}
+		if len(v1.Command) > 0 && len(v2.Command) > 0 {
+			return model.YAMLValue{}, goerr.New(
+				fmt.Sprintf("conflicting field \"command\" for environment variable \"%s\" found in both .env.yaml and .env.yml", key),
+			)
+		}
+		if v1.Alias != nil && v2.Alias != nil {
+			return model.YAMLValue{}, goerr.New(
+				fmt.Sprintf("conflicting field \"alias\" for environment variable \"%s\" found in both .env.yaml and .env.yml", key),
+			)
+		}
+		// Different value sources - this will be caught by Validate() later
+		// We still merge and let validation handle it
+	}
+
+	// Merge the values
+	merged := model.YAMLValue{}
+
+	// Take value source from whichever has it (only one should have it based on checks above)
+	if v1.Value != nil {
+		merged.Value = v1.Value
+	} else if v2.Value != nil {
+		merged.Value = v2.Value
+	}
+
+	if v1.File != nil {
+		merged.File = v1.File
+	} else if v2.File != nil {
+		merged.File = v2.File
+	}
+
+	if len(v1.Command) > 0 {
+		merged.Command = v1.Command
+	} else if len(v2.Command) > 0 {
+		merged.Command = v2.Command
+	}
+
+	if v1.Alias != nil {
+		merged.Alias = v1.Alias
+	} else if v2.Alias != nil {
+		merged.Alias = v2.Alias
+	}
+
+	// Merge refs (deduplicate)
+	refsMap := make(map[string]bool)
+	for _, ref := range v1.Refs {
+		refsMap[ref] = true
+	}
+	for _, ref := range v2.Refs {
+		refsMap[ref] = true
+	}
+	if len(refsMap) > 0 {
+		merged.Refs = make([]string, 0, len(refsMap))
+		for ref := range refsMap {
+			merged.Refs = append(merged.Refs, ref)
+		}
+	}
+
+	// Merge profiles (v2 overrides v1 for same profile names)
+	if len(v1.Profile) > 0 || len(v2.Profile) > 0 {
+		merged.Profile = make(map[string]*model.YAMLValue)
+		for name, profile := range v1.Profile {
+			merged.Profile[name] = profile
+		}
+		for name, profile := range v2.Profile {
+			merged.Profile[name] = profile // v2 overrides v1
+		}
+	}
+
+	return merged, nil
 }
 
 func readYAMLFile(path string) (string, error) {
