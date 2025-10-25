@@ -1648,4 +1648,46 @@ DB_URL:
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 		gt.Nil(t, envVars)
 	})
+
+	t.Run("Load .yml file by passing .yml path directly", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		ymlPath := filepath.Join(tmpDir, ".env.yml")
+		ymlContent := `DATABASE_URL: "postgres://localhost/testdb"
+API_KEY: "secret123"`
+		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
+
+		// Pass .yml path directly - should not try to load the same file twice
+		loadFunc := loader.NewYAMLLoader(ymlPath)
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 2)
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		gt.Equal(t, varMap["DATABASE_URL"], "postgres://localhost/testdb")
+		gt.Equal(t, varMap["API_KEY"], "secret123")
+	})
+
+	t.Run("Load .yaml file by passing .yaml path directly", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		yamlContent := `DATABASE_URL: "postgres://localhost/yamldb"
+PORT: "8080"`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
+
+		// Pass .yaml path directly
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 2)
+		varMap := make(map[string]string)
+		for _, v := range envVars {
+			varMap[v.Name] = v.Value
+		}
+
+		gt.Equal(t, varMap["DATABASE_URL"], "postgres://localhost/yamldb")
+		gt.Equal(t, varMap["PORT"], "8080")
+	})
 }

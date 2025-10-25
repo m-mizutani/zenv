@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -82,50 +83,58 @@ func NewYAMLLoaderWithProfile(path string, profile string, existingVars ...[]*mo
 }
 
 // loadAndMergeYAMLFiles loads both .env.yaml and .env.yml if they exist and merges them
-func loadAndMergeYAMLFiles(ctx context.Context, basePath string) (model.YAMLConfig, error) {
+func loadAndMergeYAMLFiles(ctx context.Context, path string) (model.YAMLConfig, error) {
 	logger := ctxlog.From(ctx)
 
-	// Try loading .env.yaml first
-	yamlPath := basePath
-	ymlPath := strings.Replace(basePath, ".yaml", ".yml", 1)
+	// Helper function to load a single YAML file
+	loadOneFile := func(filePath string) (model.YAMLConfig, bool, error) {
+		if _, err := os.Stat(filePath); err != nil {
+			if os.IsNotExist(err) {
+				return nil, false, nil // File not found is acceptable
+			}
+			return nil, false, goerr.Wrap(err, "failed to check YAML file", goerr.V("path", filePath))
+		}
 
-	var config1, config2 model.YAMLConfig
-	var found1, found2 bool
-
-	// Load .env.yaml
-	if _, err := os.Stat(yamlPath); err == nil {
-		logger.Debug("loading YAML file", "path", yamlPath)
-		data, err := os.ReadFile(yamlPath) // #nosec G304 - file path is user provided and expected
+		logger.Debug("loading YAML file", "path", filePath)
+		data, err := os.ReadFile(filePath) // #nosec G304 - file path is user provided and expected
 		if err != nil {
-			logger.Error("failed to read YAML file", "path", yamlPath, "error", err)
-			return nil, goerr.Wrap(err, "failed to read YAML file", goerr.V("path", yamlPath))
+			logger.Error("failed to read YAML file", "path", filePath, "error", err)
+			return nil, false, goerr.Wrap(err, "failed to read YAML file", goerr.V("path", filePath))
 		}
 
-		if err := yaml.Unmarshal(data, &config1); err != nil {
-			logger.Error("failed to parse YAML file", "path", yamlPath, "error", err)
-			return nil, goerr.Wrap(err, "failed to parse YAML file", goerr.V("path", yamlPath))
+		var config model.YAMLConfig
+		if err := yaml.Unmarshal(data, &config); err != nil {
+			logger.Error("failed to parse YAML file", "path", filePath, "error", err)
+			return nil, false, goerr.Wrap(err, "failed to parse YAML file", goerr.V("path", filePath))
 		}
-		found1 = true
-	} else if !os.IsNotExist(err) {
-		return nil, goerr.Wrap(err, "failed to check YAML file", goerr.V("path", yamlPath))
+
+		return config, true, nil
 	}
 
-	// Load .env.yml
-	if _, err := os.Stat(ymlPath); err == nil {
-		logger.Debug("loading YAML file", "path", ymlPath)
-		data, err := os.ReadFile(ymlPath) // #nosec G304 - file path is user provided and expected
-		if err != nil {
-			logger.Error("failed to read YAML file", "path", ymlPath, "error", err)
-			return nil, goerr.Wrap(err, "failed to read YAML file", goerr.V("path", ymlPath))
-		}
+	// Determine base path and construct both .yaml and .yml paths
+	base := path
+	ext := filepath.Ext(path)
+	if ext == ".yaml" || ext == ".yml" {
+		base = strings.TrimSuffix(path, ext)
+	}
+	yamlPath := base + ".yaml"
+	ymlPath := base + ".yml"
 
-		if err := yaml.Unmarshal(data, &config2); err != nil {
-			logger.Error("failed to parse YAML file", "path", ymlPath, "error", err)
-			return nil, goerr.Wrap(err, "failed to parse YAML file", goerr.V("path", ymlPath))
+	// Load .env.yaml
+	config1, found1, err1 := loadOneFile(yamlPath)
+	if err1 != nil {
+		return nil, err1
+	}
+
+	// Load .env.yml (only if it's a different file)
+	var config2 model.YAMLConfig
+	var found2 bool
+	if yamlPath != ymlPath {
+		var err2 error
+		config2, found2, err2 = loadOneFile(ymlPath)
+		if err2 != nil {
+			return nil, err2
 		}
-		found2 = true
-	} else if !os.IsNotExist(err) {
-		return nil, goerr.Wrap(err, "failed to check YAML file", goerr.V("path", ymlPath))
 	}
 
 	// If neither file exists, return nil
@@ -139,7 +148,7 @@ func loadAndMergeYAMLFiles(ctx context.Context, basePath string) (model.YAMLConf
 		logger.Debug("loaded YAML file", "path", ymlPath, "variables", len(config2))
 		return config2, nil
 	}
-	if !found2 {
+	if !found2 || yamlPath == ymlPath {
 		logger.Debug("loaded YAML file", "path", yamlPath, "variables", len(config1))
 		return config1, nil
 	}
