@@ -22,6 +22,8 @@ DATABASE_URL:
     - DB_USER
     - DB_PASSWORD
     - DB_HOST  # Build from variables
+  profile:
+    dev: "sqlite://local.db"  # Override with profile
 
 CONFIG_DATA:
   command:
@@ -31,10 +33,6 @@ CONFIG_DATA:
     - https://api.example.com/config
   refs:
     - API_KEY  # Fetch data from API
-
-  profiles:
-    dev:
-      DATABASE_URL: "sqlite://local.db"  # Override with profile
 ```
 
 - Load environment variables from multiple sources:
