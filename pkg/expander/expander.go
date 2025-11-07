@@ -31,7 +31,7 @@ func (e *Expander) Expand(ctx context.Context, tmpl string) (string, error) {
 	logger := ctxlog.From(ctx)
 	logger.Debug("expanding template", "template", tmpl)
 
-	t, err := template.New("").Option("missingkey=error").Parse(tmpl)
+	t, err := template.New("arg").Option("missingkey=error").Parse(tmpl)
 	if err != nil {
 		return "", goerr.Wrap(err, "failed to parse template")
 	}
