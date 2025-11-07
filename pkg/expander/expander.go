@@ -17,7 +17,7 @@ type Expander struct {
 
 // NewExpander creates a new template expander with environment variables
 func NewExpander(envVars []*model.EnvVar) *Expander {
-	envMap := make(map[string]string)
+	envMap := make(map[string]string, len(envVars))
 	for _, ev := range envVars {
 		envMap[ev.Name] = ev.Value
 	}
