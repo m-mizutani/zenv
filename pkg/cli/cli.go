@@ -116,6 +116,12 @@ func Run(ctx context.Context, args []string) error {
 			Usage:        "Set log level (debug, info, warn, error)",
 			DefaultValue: "warn",
 		},
+		{
+			Name:      "template",
+			Aliases:   []string{"t"},
+			Usage:     "Enable template expansion for command arguments using text/template syntax",
+			IsBoolean: true,
+		},
 	})
 	if err != nil {
 		return goerr.Wrap(err, "failed to create parser")
@@ -143,6 +149,7 @@ func Run(ctx context.Context, args []string) error {
 	configFiles := result.Options["config"].StringSlice()
 	logLevel := result.Options["log-level"].String()
 	profile := result.Options["profile"].String()
+	enableTemplate := result.Options["template"].IsSet()
 	commandArgs := result.Args
 
 	// Create logger based on log-level flag
@@ -209,6 +216,7 @@ func Run(ctx context.Context, args []string) error {
 	// Create executor and usecase
 	exec := executor.NewDefaultExecutor()
 	uc := usecase.NewUseCase(loaders, exec)
+	uc.EnableTemplate = enableTemplate
 
 	// If no command specified, force list mode
 	if len(commandArgs) == 0 {

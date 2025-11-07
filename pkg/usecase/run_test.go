@@ -236,4 +236,133 @@ func TestUseCase(t *testing.T) {
 		gt.Equal(t, inlineVars["VAR_WITH_EQUALS"], "value=with=equals")
 		gt.Equal(t, inlineVars["EMPTY_VAR"], "")
 	})
+
+	t.Run("Template expansion enabled", func(t *testing.T) {
+		var executedCmd string
+		var executedArgs []string
+
+		mockLoader := func(ctx context.Context) ([]*model.EnvVar, error) {
+			return []*model.EnvVar{
+				{Name: "HOST", Value: "localhost", Source: model.SourceDotEnv},
+				{Name: "PORT", Value: "8080", Source: model.SourceDotEnv},
+			}, nil
+		}
+
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
+			executedCmd = cmd
+			executedArgs = args
+			return nil
+		}
+
+		uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, mockExecutor)
+		uc.EnableTemplate = true
+
+		err := uc.Run(context.Background(), []string{"curl", "http://{{ .HOST }}:{{ .PORT }}/api"})
+
+		gt.NoError(t, err)
+		gt.Equal(t, executedCmd, "curl")
+		gt.Equal(t, len(executedArgs), 1)
+		gt.Equal(t, executedArgs[0], "http://localhost:8080/api")
+	})
+
+	t.Run("Template expansion with inline variables", func(t *testing.T) {
+		var executedArgs []string
+
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
+			executedArgs = args
+			return nil
+		}
+
+		uc := usecase.NewUseCase([]loader.LoadFunc{}, mockExecutor)
+		uc.EnableTemplate = true
+
+		err := uc.Run(context.Background(), []string{"NAME=world", "GREETING=Hello", "echo", "{{ .GREETING }}, {{ .NAME }}!"})
+
+		gt.NoError(t, err)
+		gt.Equal(t, len(executedArgs), 1)
+		gt.Equal(t, executedArgs[0], "Hello, world!")
+	})
+
+	t.Run("Template expansion disabled (default)", func(t *testing.T) {
+		var executedArgs []string
+
+		mockLoader := func(ctx context.Context) ([]*model.EnvVar, error) {
+			return []*model.EnvVar{
+				{Name: "VAR", Value: "value", Source: model.SourceDotEnv},
+			}, nil
+		}
+
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
+			executedArgs = args
+			return nil
+		}
+
+		uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, mockExecutor)
+		// EnableTemplate is false by default
+
+		err := uc.Run(context.Background(), []string{"echo", "{{ .VAR }}"})
+
+		gt.NoError(t, err)
+		gt.Equal(t, len(executedArgs), 1)
+		gt.Equal(t, executedArgs[0], "{{ .VAR }}")
+	})
+
+	t.Run("Template expansion error: undefined variable", func(t *testing.T) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
+			return nil
+		}
+
+		uc := usecase.NewUseCase([]loader.LoadFunc{}, mockExecutor)
+		uc.EnableTemplate = true
+
+		err := uc.Run(context.Background(), []string{"echo", "{{ .UNDEFINED_VAR }}"})
+
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("failed to expand template arguments")
+	})
+
+	t.Run("Template expansion error: invalid syntax", func(t *testing.T) {
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
+			return nil
+		}
+
+		uc := usecase.NewUseCase([]loader.LoadFunc{}, mockExecutor)
+		uc.EnableTemplate = true
+
+		err := uc.Run(context.Background(), []string{"echo", "{{ .VAR"})
+
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("failed to expand template arguments")
+	})
+
+	t.Run("Template expansion with multiple arguments", func(t *testing.T) {
+		var executedArgs []string
+
+		mockLoader := func(ctx context.Context) ([]*model.EnvVar, error) {
+			return []*model.EnvVar{
+				{Name: "USER", Value: "admin", Source: model.SourceDotEnv},
+				{Name: "HOST", Value: "localhost", Source: model.SourceDotEnv},
+				{Name: "PORT", Value: "5432", Source: model.SourceDotEnv},
+			}, nil
+		}
+
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
+			executedArgs = args
+			return nil
+		}
+
+		uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, mockExecutor)
+		uc.EnableTemplate = true
+
+		err := uc.Run(context.Background(), []string{"psql", "-U", "{{ .USER }}", "-h", "{{ .HOST }}", "-p", "{{ .PORT }}"})
+
+		gt.NoError(t, err)
+		gt.Equal(t, len(executedArgs), 6)
+		gt.Equal(t, executedArgs[0], "-U")
+		gt.Equal(t, executedArgs[1], "admin")
+		gt.Equal(t, executedArgs[2], "-h")
+		gt.Equal(t, executedArgs[3], "localhost")
+		gt.Equal(t, executedArgs[4], "-p")
+		gt.Equal(t, executedArgs[5], "5432")
+	})
 }
