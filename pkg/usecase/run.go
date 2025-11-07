@@ -9,13 +9,15 @@ import (
 	"github.com/m-mizutani/ctxlog"
 	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/zenv/v2/pkg/executor"
+	"github.com/m-mizutani/zenv/v2/pkg/expander"
 	"github.com/m-mizutani/zenv/v2/pkg/loader"
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
 type UseCase struct {
-	Loaders  []loader.LoadFunc
-	Executor executor.ExecuteFunc
+	Loaders        []loader.LoadFunc
+	Executor       executor.ExecuteFunc
+	EnableTemplate bool
 }
 
 func NewUseCase(loaders []loader.LoadFunc, exec executor.ExecuteFunc) *UseCase {
@@ -72,9 +74,22 @@ func (uc *UseCase) Run(ctx context.Context, args []string) error {
 		return nil
 	}
 
+	// Expand command arguments if template mode is enabled
+	finalArgs := commandArgs
+	if uc.EnableTemplate {
+		logger.Debug("template expansion enabled, expanding arguments")
+		exp := expander.NewExpander(mergedEnvVars)
+		expandedArgs, err := exp.ExpandArgs(ctx, commandArgs)
+		if err != nil {
+			return goerr.Wrap(err, "failed to expand template arguments")
+		}
+		finalArgs = expandedArgs
+		logger.Debug("arguments expanded", "original", commandArgs, "expanded", finalArgs)
+	}
+
 	// Execute command with environment variables
-	logger.Info("executing command", "command", command, "args", commandArgs, "env_vars", len(mergedEnvVars))
-	err := uc.Executor(ctx, command, commandArgs, mergedEnvVars)
+	logger.Info("executing command", "command", command, "args", finalArgs, "env_vars", len(mergedEnvVars))
+	err := uc.Executor(ctx, command, finalArgs, mergedEnvVars)
 	if err != nil {
 		return err // Return the error with embedded exit code
 	}
