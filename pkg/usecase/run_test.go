@@ -14,6 +14,32 @@ import (
 	"github.com/m-mizutani/zenv/v2/pkg/usecase"
 )
 
+// testShowEnvVarsOutput is a helper function to capture stdout when showing environment variables
+func testShowEnvVarsOutput(t *testing.T, envs []*model.EnvVar) string {
+	t.Helper()
+
+	r, w, err := os.Pipe()
+	gt.NoError(t, err)
+
+	oldStdout := os.Stdout
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	mockLoader := func(ctx context.Context) ([]*model.EnvVar, error) {
+		return envs, nil
+	}
+	uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, executor.NewDefaultExecutor())
+
+	runErr := uc.Run(context.Background(), []string{})
+	gt.NoError(t, runErr)
+
+	w.Close()
+	output, readErr := io.ReadAll(r)
+	gt.NoError(t, readErr)
+
+	return string(output)
+}
+
 func TestUseCase(t *testing.T) {
 
 	t.Run("Run with inline environment variables only", func(t *testing.T) {
@@ -152,48 +178,19 @@ func TestUseCase(t *testing.T) {
 	})
 
 	t.Run("Show environment variables when no command specified", func(t *testing.T) {
-		// Capture stdout
-		r, w, _ := os.Pipe()
-		oldStdout := os.Stdout
-		os.Stdout = w
+		output := testShowEnvVarsOutput(t, []*model.EnvVar{
+			{Name: "TEST_VAR", Value: "test_value", Source: model.SourceDotEnv},
+		})
 
-		mockLoader := func(ctx context.Context) ([]*model.EnvVar, error) {
-			return []*model.EnvVar{
-				{Name: "TEST_VAR", Value: "test_value", Source: model.SourceDotEnv},
-			}, nil
-		}
-
-		uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, executor.NewDefaultExecutor())
-
-		err := uc.Run(context.Background(), []string{})
-
-		// Restore stdout and read all captured output
-		w.Close()
-		os.Stdout = oldStdout
-		output := string(gt.R1(io.ReadAll(r)).NoError(t))
-
-		gt.NoError(t, err)
 		gt.S(t, output).Contains("TEST_VAR=test_value")
 		gt.S(t, output).Contains("[.env]")
 	})
 
 	t.Run("Show environment variables with inline vars only", func(t *testing.T) {
-		// Capture stdout
-		r, w, _ := os.Pipe()
-		oldStdout := os.Stdout
-		os.Stdout = w
+		output := testShowEnvVarsOutput(t, []*model.EnvVar{
+			{Name: "INLINE_VAR", Value: "inline_value", Source: model.SourceInline},
+		})
 
-		uc := usecase.NewUseCase([]loader.LoadFunc{}, executor.NewDefaultExecutor())
-
-		// Call with inline var but no command (empty args after inline var)
-		err := uc.Run(context.Background(), []string{"INLINE_VAR=inline_value"})
-
-		// Restore stdout and read all captured output
-		w.Close()
-		os.Stdout = oldStdout
-		output := string(gt.R1(io.ReadAll(r)).NoError(t))
-
-		gt.NoError(t, err)
 		gt.S(t, output).Contains("INLINE_VAR=inline_value")
 		gt.S(t, output).Contains("[inline]")
 	})
@@ -368,30 +365,12 @@ func TestUseCase(t *testing.T) {
 	})
 
 	t.Run("Environment variables are sorted alphabetically when displayed", func(t *testing.T) {
-		// Capture stdout
-		r, w, _ := os.Pipe()
-		oldStdout := os.Stdout
-		os.Stdout = w
-
-		mockLoader := func(ctx context.Context) ([]*model.EnvVar, error) {
-			return []*model.EnvVar{
-				{Name: "ZEBRA", Value: "last", Source: model.SourceDotEnv},
-				{Name: "APPLE", Value: "first", Source: model.SourceDotEnv},
-				{Name: "MIDDLE", Value: "mid", Source: model.SourceDotEnv},
-				{Name: "banana", Value: "lowercase", Source: model.SourceInline},
-			}, nil
-		}
-
-		uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, executor.NewDefaultExecutor())
-
-		err := uc.Run(context.Background(), []string{})
-
-		// Restore stdout and read all captured output
-		w.Close()
-		os.Stdout = oldStdout
-		output := string(gt.R1(io.ReadAll(r)).NoError(t))
-
-		gt.NoError(t, err)
+		output := testShowEnvVarsOutput(t, []*model.EnvVar{
+			{Name: "ZEBRA", Value: "last", Source: model.SourceDotEnv},
+			{Name: "APPLE", Value: "first", Source: model.SourceDotEnv},
+			{Name: "MIDDLE", Value: "mid", Source: model.SourceDotEnv},
+			{Name: "banana", Value: "lowercase", Source: model.SourceInline},
+		})
 
 		// Check that variables appear in alphabetical order (case-insensitive)
 		appleIdx := strings.Index(output, "APPLE=first")
@@ -405,29 +384,11 @@ func TestUseCase(t *testing.T) {
 	})
 
 	t.Run("Environment variables sorting is case-insensitive", func(t *testing.T) {
-		// Capture stdout
-		r, w, _ := os.Pipe()
-		oldStdout := os.Stdout
-		os.Stdout = w
-
-		mockLoader := func(ctx context.Context) ([]*model.EnvVar, error) {
-			return []*model.EnvVar{
-				{Name: "aaa", Value: "1", Source: model.SourceDotEnv},
-				{Name: "AAB", Value: "2", Source: model.SourceDotEnv},
-				{Name: "Aac", Value: "3", Source: model.SourceDotEnv},
-			}, nil
-		}
-
-		uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, executor.NewDefaultExecutor())
-
-		err := uc.Run(context.Background(), []string{})
-
-		// Restore stdout and read all captured output
-		w.Close()
-		os.Stdout = oldStdout
-		output := string(gt.R1(io.ReadAll(r)).NoError(t))
-
-		gt.NoError(t, err)
+		output := testShowEnvVarsOutput(t, []*model.EnvVar{
+			{Name: "aaa", Value: "1", Source: model.SourceDotEnv},
+			{Name: "AAB", Value: "2", Source: model.SourceDotEnv},
+			{Name: "Aac", Value: "3", Source: model.SourceDotEnv},
+		})
 
 		// Check order: aaa < AAB < Aac
 		aaaIdx := strings.Index(output, "aaa=1")
