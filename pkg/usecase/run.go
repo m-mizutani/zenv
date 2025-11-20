@@ -142,12 +142,16 @@ func mergeEnvVars(envVars []*model.EnvVar) []*model.EnvVar {
 }
 
 func showEnvVars(envVars []*model.EnvVar) {
+	// Create a copy to avoid modifying the input slice
+	varsToShow := make([]*model.EnvVar, len(envVars))
+	copy(varsToShow, envVars)
+
 	// Sort environment variables by name (case-insensitive)
-	sort.Slice(envVars, func(i, j int) bool {
-		return strings.ToLower(envVars[i].Name) < strings.ToLower(envVars[j].Name)
+	sort.Slice(varsToShow, func(i, j int) bool {
+		return strings.ToLower(varsToShow[i].Name) < strings.ToLower(varsToShow[j].Name)
 	})
 
-	for _, envVar := range envVars {
+	for _, envVar := range varsToShow {
 		var sourceStr string
 		switch envVar.Source {
 		case model.SourceSystem:
