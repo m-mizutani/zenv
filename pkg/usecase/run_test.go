@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/m-mizutani/gt"
@@ -364,5 +365,76 @@ func TestUseCase(t *testing.T) {
 		gt.Equal(t, executedArgs[3], "localhost")
 		gt.Equal(t, executedArgs[4], "-p")
 		gt.Equal(t, executedArgs[5], "5432")
+	})
+
+	t.Run("Environment variables are sorted alphabetically when displayed", func(t *testing.T) {
+		// Capture stdout
+		r, w, _ := os.Pipe()
+		oldStdout := os.Stdout
+		os.Stdout = w
+
+		mockLoader := func(ctx context.Context) ([]*model.EnvVar, error) {
+			return []*model.EnvVar{
+				{Name: "ZEBRA", Value: "last", Source: model.SourceDotEnv},
+				{Name: "APPLE", Value: "first", Source: model.SourceDotEnv},
+				{Name: "MIDDLE", Value: "mid", Source: model.SourceDotEnv},
+				{Name: "banana", Value: "lowercase", Source: model.SourceInline},
+			}, nil
+		}
+
+		uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, executor.NewDefaultExecutor())
+
+		err := uc.Run(context.Background(), []string{})
+
+		// Restore stdout and read all captured output
+		w.Close()
+		os.Stdout = oldStdout
+		output := string(gt.R1(io.ReadAll(r)).NoError(t))
+
+		gt.NoError(t, err)
+
+		// Check that variables appear in alphabetical order (case-insensitive)
+		appleIdx := strings.Index(output, "APPLE=first")
+		bananaIdx := strings.Index(output, "banana=lowercase")
+		middleIdx := strings.Index(output, "MIDDLE=mid")
+		zebraIdx := strings.Index(output, "ZEBRA=last")
+
+		gt.True(t, appleIdx < bananaIdx)
+		gt.True(t, bananaIdx < middleIdx)
+		gt.True(t, middleIdx < zebraIdx)
+	})
+
+	t.Run("Environment variables sorting is case-insensitive", func(t *testing.T) {
+		// Capture stdout
+		r, w, _ := os.Pipe()
+		oldStdout := os.Stdout
+		os.Stdout = w
+
+		mockLoader := func(ctx context.Context) ([]*model.EnvVar, error) {
+			return []*model.EnvVar{
+				{Name: "aaa", Value: "1", Source: model.SourceDotEnv},
+				{Name: "AAB", Value: "2", Source: model.SourceDotEnv},
+				{Name: "Aac", Value: "3", Source: model.SourceDotEnv},
+			}, nil
+		}
+
+		uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, executor.NewDefaultExecutor())
+
+		err := uc.Run(context.Background(), []string{})
+
+		// Restore stdout and read all captured output
+		w.Close()
+		os.Stdout = oldStdout
+		output := string(gt.R1(io.ReadAll(r)).NoError(t))
+
+		gt.NoError(t, err)
+
+		// Check order: aaa < AAB < Aac
+		aaaIdx := strings.Index(output, "aaa=1")
+		aabIdx := strings.Index(output, "AAB=2")
+		aacIdx := strings.Index(output, "Aac=3")
+
+		gt.True(t, aaaIdx < aabIdx)
+		gt.True(t, aabIdx < aacIdx)
 	})
 }

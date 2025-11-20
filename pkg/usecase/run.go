@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/m-mizutani/ctxlog"
@@ -141,6 +142,11 @@ func mergeEnvVars(envVars []*model.EnvVar) []*model.EnvVar {
 }
 
 func showEnvVars(envVars []*model.EnvVar) {
+	// Sort environment variables by name (case-insensitive)
+	sort.Slice(envVars, func(i, j int) bool {
+		return strings.ToLower(envVars[i].Name) < strings.ToLower(envVars[j].Name)
+	})
+
 	for _, envVar := range envVars {
 		var sourceStr string
 		switch envVar.Source {
