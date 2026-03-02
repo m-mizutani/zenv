@@ -40,8 +40,8 @@ func TestDefaultExecutor(t *testing.T) {
 		// Test with a command that exits with code 1
 		err := execFunc(context.Background(), "sh", []string{"-c", "exit 1"}, envVars)
 		gt.Error(t, err)
-		exitCode := model.GetExitCode(err)
-		gt.Equal(t, exitCode, 1)
+		gt.Equal(t, model.GetExitCode(err), 1)
+		gt.True(t, model.IsExecutorError(err))
 	})
 
 	t.Run("Handle command that returns different exit code", func(t *testing.T) {
@@ -51,8 +51,8 @@ func TestDefaultExecutor(t *testing.T) {
 		// Test with a command that exits with code 42
 		err := execFunc(context.Background(), "sh", []string{"-c", "exit 42"}, envVars)
 		gt.Error(t, err)
-		exitCode := model.GetExitCode(err)
-		gt.Equal(t, exitCode, 42)
+		gt.Equal(t, model.GetExitCode(err), 42)
+		gt.True(t, model.IsExecutorError(err))
 	})
 
 	t.Run("Handle non-existent command", func(t *testing.T) {
@@ -61,8 +61,8 @@ func TestDefaultExecutor(t *testing.T) {
 
 		err := execFunc(context.Background(), "nonexistentcommand123", []string{}, envVars)
 		gt.Error(t, err)
-		exitCode := model.GetExitCode(err)
-		gt.Equal(t, exitCode, 1) // Should return default exit code 1 for command not found
+		gt.Equal(t, model.GetExitCode(err), 1)
+		gt.True(t, model.IsExecutorError(err))
 	})
 
 	t.Run("Execute command with empty arguments", func(t *testing.T) {
