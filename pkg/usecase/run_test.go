@@ -432,14 +432,11 @@ func TestUseCase(t *testing.T) {
 		gt.NoError(t, err)
 
 		// The executor should receive the real value, not the masked one
-		found := false
+		envMap := make(map[string]*model.EnvVar)
 		for _, envVar := range executedEnvVars {
-			if envVar.Name == "SECRET_VAR" {
-				gt.Equal(t, envVar.Value, "real-secret-value")
-				found = true
-				break
-			}
+			envMap[envVar.Name] = envVar
 		}
-		gt.True(t, found)
+		gt.V(t, envMap["SECRET_VAR"]).NotNil()
+		gt.Equal(t, envMap["SECRET_VAR"].Value, "real-secret-value")
 	})
 }
