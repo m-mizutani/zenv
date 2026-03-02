@@ -405,7 +405,8 @@ func TestUseCase(t *testing.T) {
 			{Name: "APP_NAME", Value: "my-app", Source: model.SourceYAML, Secret: false},
 		})
 
-		gt.S(t, output).Contains("DB_PASS=***** [.yaml]")
+		// "super-secret" is 12 chars, so masked value should be 12 asterisks
+		gt.S(t, output).Contains("DB_PASS=************ [.yaml]")
 		gt.S(t, output).Contains("APP_NAME=my-app [.yaml]")
 		gt.S(t, output).NotContains("super-secret")
 	})

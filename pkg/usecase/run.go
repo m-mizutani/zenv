@@ -165,7 +165,7 @@ func showEnvVars(envVars []*model.EnvVar) {
 		}
 		displayValue := envVar.Value
 		if envVar.Secret {
-			displayValue = "*****"
+			displayValue = strings.Repeat("*", len(envVar.Value))
 		}
 		fmt.Printf("%s=%s [%s]\n", envVar.Name, displayValue, sourceStr)
 	}
