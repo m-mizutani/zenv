@@ -1691,3 +1691,50 @@ PORT: "8080"`
 		gt.Equal(t, varMap["PORT"], "8080")
 	})
 }
+
+func TestYAMLLoaderSecret(t *testing.T) {
+
+	t.Run("Secret flag is propagated to EnvVar", func(t *testing.T) {
+		loadFunc := loader.NewYAMLLoader("testdata/secret.yaml")
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 3)
+
+		varMap := make(map[string]*model.EnvVar)
+		for _, v := range envVars {
+			varMap[v.Name] = v
+		}
+
+		gt.Equal(t, varMap["DATABASE_URL"].Secret, true)
+		gt.Equal(t, varMap["API_KEY"].Secret, true)
+		gt.Equal(t, varMap["APP_NAME"].Secret, false)
+	})
+
+	t.Run("Secret flag inherited from base in profile", func(t *testing.T) {
+		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/secret_profile.yaml", "dev")
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		varMap := make(map[string]*model.EnvVar)
+		for _, v := range envVars {
+			varMap[v.Name] = v
+		}
+
+		// DATABASE_URL has secret: true on base, so profile "dev" should inherit it
+		gt.Equal(t, varMap["DATABASE_URL"].Secret, true)
+		// API_KEY has secret on profile "dev" only
+		gt.Equal(t, varMap["API_KEY"].Secret, true)
+	})
+
+	t.Run("Secret flag not set in profile when base has no secret", func(t *testing.T) {
+		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/secret_profile.yaml", "")
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		varMap := make(map[string]*model.EnvVar)
+		for _, v := range envVars {
+			varMap[v.Name] = v
+		}
+
+		gt.Equal(t, varMap["DATABASE_URL"].Secret, true)
+		gt.Equal(t, varMap["API_KEY"].Secret, false)
+	})
+}

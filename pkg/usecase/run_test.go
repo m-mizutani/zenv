@@ -398,4 +398,47 @@ func TestUseCase(t *testing.T) {
 		gt.True(t, aaaIdx < aabIdx)
 		gt.True(t, aabIdx < aacIdx)
 	})
+
+	t.Run("Secret variables are masked in display", func(t *testing.T) {
+		output := testShowEnvVarsOutput(t, []*model.EnvVar{
+			{Name: "DB_PASS", Value: "super-secret", Source: model.SourceYAML, Secret: true},
+			{Name: "APP_NAME", Value: "my-app", Source: model.SourceYAML, Secret: false},
+		})
+
+		gt.S(t, output).Contains("DB_PASS=***** [.yaml]")
+		gt.S(t, output).Contains("APP_NAME=my-app [.yaml]")
+		gt.S(t, output).NotContains("super-secret")
+	})
+
+	t.Run("Secret variables pass real value to executor", func(t *testing.T) {
+		var executedEnvVars []*model.EnvVar
+
+		mockLoader := func(ctx context.Context) ([]*model.EnvVar, error) {
+			return []*model.EnvVar{
+				{Name: "SECRET_VAR", Value: "real-secret-value", Source: model.SourceYAML, Secret: true},
+			}, nil
+		}
+
+		mockExecutor := func(ctx context.Context, cmd string, args []string, envVars []*model.EnvVar) error {
+			executedEnvVars = envVars
+			return nil
+		}
+
+		uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, mockExecutor)
+
+		err := uc.Run(context.Background(), []string{"echo", "test"})
+
+		gt.NoError(t, err)
+
+		// The executor should receive the real value, not the masked one
+		found := false
+		for _, envVar := range executedEnvVars {
+			if envVar.Name == "SECRET_VAR" {
+				gt.Equal(t, envVar.Value, "real-secret-value")
+				found = true
+				break
+			}
+		}
+		gt.True(t, found)
+	})
 }

@@ -20,6 +20,8 @@ type YAMLValue struct {
 	Alias *string `yaml:"alias,omitempty"`
 	// Refs lists the environment variables referenced in value or command templates
 	Refs []string `yaml:"refs,omitempty"`
+	// Secret indicates the value should be masked in display output
+	Secret bool `yaml:"secret,omitempty"`
 	// Profile contains profile-specific configurations
 	Profile map[string]*YAMLValue `yaml:"profile,omitempty"`
 }
