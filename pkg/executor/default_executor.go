@@ -25,10 +25,23 @@ func NewDefaultExecutor() ExecuteFunc {
 		}
 		command.Env = env
 
-		// Set up standard streams
+		// Collect secret values for redaction
+		var secrets []string
+		for _, envVar := range envVars {
+			if envVar.Secret && envVar.Value != "" {
+				secrets = append(secrets, envVar.Value)
+			}
+		}
+
+		// Set up standard streams with optional redaction
 		command.Stdin = os.Stdin
-		command.Stdout = os.Stdout
-		command.Stderr = os.Stderr
+		if len(secrets) > 0 {
+			command.Stdout = newRedactWriter(os.Stdout, secrets)
+			command.Stderr = newRedactWriter(os.Stderr, secrets)
+		} else {
+			command.Stdout = os.Stdout
+			command.Stderr = os.Stderr
+		}
 
 		err := command.Run()
 		if err != nil {
