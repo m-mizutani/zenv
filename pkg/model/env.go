@@ -9,6 +9,7 @@ type EnvVar struct {
 	Name   string
 	Value  string
 	Source EnvSource
+	Secret bool
 }
 
 type EnvSource int

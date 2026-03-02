@@ -163,6 +163,10 @@ func showEnvVars(envVars []*model.EnvVar) {
 		case model.SourceInline:
 			sourceStr = "inline"
 		}
-		fmt.Printf("%s=%s [%s]\n", envVar.Name, envVar.Value, sourceStr)
+		displayValue := envVar.Value
+		if envVar.Secret {
+			displayValue = strings.Repeat("*", len(envVar.Value))
+		}
+		fmt.Printf("%s=%s [%s]\n", envVar.Name, displayValue, sourceStr)
 	}
 }

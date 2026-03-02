@@ -73,6 +73,7 @@ func NewYAMLLoaderWithProfile(path string, profile string, existingVars ...[]*mo
 				Name:   key,
 				Value:  resolvedValue,
 				Source: model.SourceYAML,
+				Secret: value.Secret || effectiveValue.Secret,
 			}
 			envVars = append(envVars, envVar)
 		}
@@ -265,6 +266,9 @@ func mergeYAMLValues(key string, v1, v2 model.YAMLValue) (model.YAMLValue, error
 			merged.Refs = append(merged.Refs, ref)
 		}
 	}
+
+	// Merge secret flag (true if either is true)
+	merged.Secret = v1.Secret || v2.Secret
 
 	// Merge profiles (v2 overrides v1 for same profile names)
 	if len(v1.Profile) > 0 || len(v2.Profile) > 0 {

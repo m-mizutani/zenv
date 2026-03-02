@@ -296,4 +296,46 @@ API_URL:
 		gt.V(t, devProfile.Value).NotNil()
 		gt.V(t, *devProfile.Value).Equal("http://localhost:8080")
 	})
+
+	t.Run("with secret flag", func(t *testing.T) {
+		input := `
+DATABASE_URL:
+  value: "postgres://user:pass@localhost/db"
+  secret: true
+
+APP_NAME: "my-app"
+`
+		var config model.YAMLConfig
+		err := yaml.Unmarshal([]byte(input), &config)
+		gt.NoError(t, err)
+		gt.V(t, config["DATABASE_URL"].Secret).Equal(true)
+		gt.V(t, config["APP_NAME"].Secret).Equal(false)
+	})
+
+	t.Run("secret defaults to false when omitted", func(t *testing.T) {
+		input := `
+MY_VAR:
+  value: "some-value"
+`
+		var config model.YAMLConfig
+		err := yaml.Unmarshal([]byte(input), &config)
+		gt.NoError(t, err)
+		gt.V(t, config["MY_VAR"].Secret).Equal(false)
+	})
+
+	t.Run("secret in profile", func(t *testing.T) {
+		input := `
+API_KEY:
+  value: "prod-key"
+  profile:
+    dev:
+      value: "dev-key"
+      secret: true
+`
+		var config model.YAMLConfig
+		err := yaml.Unmarshal([]byte(input), &config)
+		gt.NoError(t, err)
+		gt.V(t, config["API_KEY"].Secret).Equal(false)
+		gt.V(t, config["API_KEY"].Profile["dev"].Secret).Equal(true)
+	})
 }
