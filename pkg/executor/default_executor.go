@@ -8,7 +8,6 @@ import (
 	"syscall"
 
 	"github.com/m-mizutani/ctxlog"
-	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
@@ -38,11 +37,11 @@ func NewDefaultExecutor() ExecuteFunc {
 				if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
 					exitCode := status.ExitStatus()
 					logger.Debug("command exited with non-zero code", "cmd", cmd, "exit_code", exitCode)
-					return model.WithExitCode(goerr.Wrap(err, "command exited with non-zero code"), exitCode)
+					return model.NewExecutorError(err, exitCode)
 				}
 			}
 			logger.Debug("failed to execute command", "cmd", cmd, "error", err)
-			return model.WithExitCode(goerr.Wrap(err, "failed to execute command"), 1)
+			return model.NewExecutorError(err, 1)
 		}
 
 		logger.Debug("command executed successfully", "cmd", cmd)

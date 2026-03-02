@@ -224,8 +224,7 @@ func Run(ctx context.Context, args []string) error {
 	}
 
 	if err := uc.Run(ctx, commandArgs); err != nil {
-		exitCode := model.GetExitCode(err)
-		return model.WithExitCode(err, exitCode)
+		return err
 	}
 	return nil
 }
