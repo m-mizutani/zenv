@@ -510,6 +510,24 @@ SECRET:
   file: "/absolute/path/to/file"  # Use absolute paths
 ```
 
+## Secret Output Redaction
+
+When environment variables are marked with `secret: true` in YAML configuration, zenv automatically redacts their values from the child process's stdout and stderr output. Any occurrence of a secret value in the output is replaced with `*****`.
+
+```yaml
+API_KEY:
+  value: "sk-abc123"
+  secret: true
+```
+
+```bash
+# If the command outputs the secret value, it will be redacted
+$ zenv -c .env.yaml sh -c 'echo "key is sk-abc123"'
+key is *****
+```
+
+This feature is always enabled and requires no additional flags. If no secret variables are configured, there is no performance impact.
+
 ## Best Practices for v2
 
 1. **Use YAML for complex configurations** that need file reading or command execution

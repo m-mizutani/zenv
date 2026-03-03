@@ -2,6 +2,8 @@ package executor_test
 
 import (
 	"context"
+	"io"
+	"os"
 	"testing"
 
 	"github.com/m-mizutani/gt"
@@ -115,5 +117,78 @@ func TestDefaultExecutor(t *testing.T) {
 		// Check if the environment variable is accessible
 		err := execFunc(context.Background(), "sh", []string{"-c", "[ \"$CUSTOM_VAR\" = \"custom_value\" ]"}, envVars)
 		gt.NoError(t, err)
+	})
+
+	t.Run("Redact secret values in stdout", func(t *testing.T) {
+		r, w, pipeErr := os.Pipe()
+		gt.NoError(t, pipeErr)
+
+		oldStdout := os.Stdout
+		os.Stdout = w
+		defer func() { os.Stdout = oldStdout }()
+
+		execFunc := executor.NewDefaultExecutor()
+		envVars := []*model.EnvVar{
+			{Name: "SECRET_TOKEN", Value: "my-secret-123", Source: model.SourceYAML, Secret: true},
+			{Name: "PUBLIC_VAR", Value: "visible", Source: model.SourceDotEnv},
+		}
+
+		err := execFunc(context.Background(), "sh", []string{"-c", "echo my-secret-123 visible"}, envVars)
+		gt.NoError(t, err)
+
+		gt.NoError(t, w.Close())
+		output, readErr := io.ReadAll(r)
+		gt.NoError(t, readErr)
+
+		gt.S(t, string(output)).NotContains("my-secret-123")
+		gt.S(t, string(output)).Contains("*****")
+		gt.S(t, string(output)).Contains("visible")
+	})
+
+	t.Run("Redact secret values in stderr", func(t *testing.T) {
+		r, w, pipeErr := os.Pipe()
+		gt.NoError(t, pipeErr)
+
+		oldStderr := os.Stderr
+		os.Stderr = w
+		defer func() { os.Stderr = oldStderr }()
+
+		execFunc := executor.NewDefaultExecutor()
+		envVars := []*model.EnvVar{
+			{Name: "SECRET_TOKEN", Value: "my-secret-123", Source: model.SourceYAML, Secret: true},
+		}
+
+		err := execFunc(context.Background(), "sh", []string{"-c", ">&2 echo my-secret-123"}, envVars)
+		gt.NoError(t, err)
+
+		gt.NoError(t, w.Close())
+		output, readErr := io.ReadAll(r)
+		gt.NoError(t, readErr)
+
+		gt.S(t, string(output)).NotContains("my-secret-123")
+		gt.S(t, string(output)).Contains("*****")
+	})
+
+	t.Run("No redaction when no secret env vars", func(t *testing.T) {
+		r, w, pipeErr := os.Pipe()
+		gt.NoError(t, pipeErr)
+
+		oldStdout := os.Stdout
+		os.Stdout = w
+		defer func() { os.Stdout = oldStdout }()
+
+		execFunc := executor.NewDefaultExecutor()
+		envVars := []*model.EnvVar{
+			{Name: "PUBLIC_VAR", Value: "visible", Source: model.SourceDotEnv},
+		}
+
+		err := execFunc(context.Background(), "echo", []string{"visible"}, envVars)
+		gt.NoError(t, err)
+
+		gt.NoError(t, w.Close())
+		output, readErr := io.ReadAll(r)
+		gt.NoError(t, readErr)
+
+		gt.S(t, string(output)).Contains("visible")
 	})
 }
