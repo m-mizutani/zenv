@@ -263,6 +263,16 @@ zenv -c config.yaml -p dev myapp
 zenv -c config.yaml --profile staging deploy
 ```
 
+#### Secret Redaction
+Add `secret: true` to redact the variable's value. In the variable list it is masked with `*`, and in command stdout/stderr it is replaced with `*****`:
+```yaml
+DB_PASSWORD:
+  file: "/path/to/db_secret"
+  secret: true
+```
+
+Profile values inherit `secret: true` from their base configuration.
+
 ## Configuration Rules
 
 **Value Types** (only one can be specified per variable):
