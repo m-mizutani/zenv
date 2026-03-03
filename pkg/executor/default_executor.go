@@ -35,15 +35,26 @@ func NewDefaultExecutor() ExecuteFunc {
 
 		// Set up standard streams with optional redaction
 		command.Stdin = os.Stdin
+		var stdoutRedactor, stderrRedactor *redactWriter
 		if len(secrets) > 0 {
-			command.Stdout = newRedactWriter(os.Stdout, secrets)
-			command.Stderr = newRedactWriter(os.Stderr, secrets)
+			stdoutRedactor = newRedactWriter(os.Stdout, secrets)
+			stderrRedactor = newRedactWriter(os.Stderr, secrets)
+			command.Stdout = stdoutRedactor
+			command.Stderr = stderrRedactor
 		} else {
 			command.Stdout = os.Stdout
 			command.Stderr = os.Stderr
 		}
 
 		err := command.Run()
+
+		// Flush any remaining buffered data from redact writers
+		if stdoutRedactor != nil {
+			_ = stdoutRedactor.Flush()
+		}
+		if stderrRedactor != nil {
+			_ = stderrRedactor.Flush()
+		}
 		if err != nil {
 			// Extract exit code
 			if exitError, ok := err.(*exec.ExitError); ok {
