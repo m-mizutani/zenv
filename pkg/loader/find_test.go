@@ -46,6 +46,32 @@ func TestFindFileUpward(t *testing.T) {
 		gt.Value(t, result).Equal(target)
 	})
 
+	t.Run("multiple filenames finds first match", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		target := filepath.Join(tmpDir, ".env.yml")
+		f := gt.R1(os.Create(target)).NoError(t)
+		gt.NoError(t, f.Close())
+
+		child := filepath.Join(tmpDir, "subdir")
+		gt.NoError(t, os.Mkdir(child, 0o755))
+
+		result := loader.FindFileUpward(child, ".env.yaml", ".env.yml")
+		gt.Value(t, result).Equal(target)
+	})
+
+	t.Run("multiple filenames prefers first in same directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlTarget := filepath.Join(tmpDir, ".env.yaml")
+		f1 := gt.R1(os.Create(yamlTarget)).NoError(t)
+		gt.NoError(t, f1.Close())
+		ymlTarget := filepath.Join(tmpDir, ".env.yml")
+		f2 := gt.R1(os.Create(ymlTarget)).NoError(t)
+		gt.NoError(t, f2.Close())
+
+		result := loader.FindFileUpward(tmpDir, ".env.yaml", ".env.yml")
+		gt.Value(t, result).Equal(yamlTarget)
+	})
+
 	t.Run("file not found returns empty string", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		child := filepath.Join(tmpDir, "deep", "nested")
