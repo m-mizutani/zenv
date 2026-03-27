@@ -180,7 +180,7 @@ func Run(ctx context.Context, args []string) error {
 		envLoaders = append(envLoaders, loader.NewDotEnvLoader(envFile))
 	}
 	if len(envFiles) == 0 {
-		envLoaders = append(envLoaders, loader.NewDotEnvLoader(".env"))
+		envLoaders = append(envLoaders, loader.NewDotEnvLoader(loader.ResolveDefaultDotEnvPath()))
 	}
 
 	// Execute .env loaders once and collect results
@@ -202,7 +202,7 @@ func Run(ctx context.Context, args []string) error {
 		yamlLoaders = append(yamlLoaders, loader.NewYAMLLoaderWithProfile(configFile, profile, allExistingVars))
 	}
 	if len(configFiles) == 0 {
-		yamlLoaders = append(yamlLoaders, loader.NewYAMLLoaderWithProfile(".env.yaml", profile, allExistingVars))
+		yamlLoaders = append(yamlLoaders, loader.NewYAMLLoaderWithProfile(loader.ResolveDefaultYAMLPath(), profile, allExistingVars))
 	}
 
 	// Combine all loaders for the usecase
