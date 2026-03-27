@@ -180,7 +180,13 @@ func Run(ctx context.Context, args []string) error {
 		envLoaders = append(envLoaders, loader.NewDotEnvLoader(envFile))
 	}
 	if len(envFiles) == 0 {
-		envLoaders = append(envLoaders, loader.NewDotEnvLoader(".env"))
+		envPath := ".env"
+		if wd, err := os.Getwd(); err == nil {
+			if found := loader.FindFileUpward(wd, ".env"); found != "" {
+				envPath = found
+			}
+		}
+		envLoaders = append(envLoaders, loader.NewDotEnvLoader(envPath))
 	}
 
 	// Execute .env loaders once and collect results
@@ -202,7 +208,13 @@ func Run(ctx context.Context, args []string) error {
 		yamlLoaders = append(yamlLoaders, loader.NewYAMLLoaderWithProfile(configFile, profile, allExistingVars))
 	}
 	if len(configFiles) == 0 {
-		yamlLoaders = append(yamlLoaders, loader.NewYAMLLoaderWithProfile(".env.yaml", profile, allExistingVars))
+		yamlPath := ".env.yaml"
+		if wd, err := os.Getwd(); err == nil {
+			if found := loader.FindFileUpward(wd, ".env.yaml"); found != "" {
+				yamlPath = found
+			}
+		}
+		yamlLoaders = append(yamlLoaders, loader.NewYAMLLoaderWithProfile(yamlPath, profile, allExistingVars))
 	}
 
 	// Combine all loaders for the usecase
