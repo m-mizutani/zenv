@@ -44,6 +44,43 @@ func TestYAMLLoader(t *testing.T) {
 		gt.Equal(t, envVars[0].Source, model.SourceYAML)
 	})
 
+	t.Run("File path is resolved relative to YAML file directory", func(t *testing.T) {
+		loadFunc := loader.NewYAMLLoader("testdata/subdir/with_file_relative.yaml")
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 1)
+		gt.Equal(t, envVars[0].Name, "CONFIG_DATA")
+		gt.Equal(t, envVars[0].Value, "config file content")
+	})
+
+	t.Run("File path in same directory as YAML file", func(t *testing.T) {
+		loadFunc := loader.NewYAMLLoader("testdata/subdir/with_file_same_dir.yaml")
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 1)
+		gt.Equal(t, envVars[0].Name, "SECRET_KEY")
+		gt.Equal(t, envVars[0].Value, "secret from subdir")
+	})
+
+	t.Run("Absolute file path is used as-is", func(t *testing.T) {
+		// Create a temp file with known content
+		tmpDir := t.TempDir()
+		absPath := filepath.Join(tmpDir, "abs_content.txt")
+		gt.NoError(t, os.WriteFile(absPath, []byte("absolute content"), 0600))
+
+		// Create a YAML file referencing the absolute path
+		yamlContent := "ABS_VAR:\n  file: '" + absPath + "'\n"
+		yamlPath := filepath.Join(tmpDir, ".env.yaml")
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0600))
+
+		loadFunc := loader.NewYAMLLoader(yamlPath)
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+
+		gt.Equal(t, len(envVars), 1)
+		gt.Equal(t, envVars[0].Name, "ABS_VAR")
+		gt.Equal(t, envVars[0].Value, "absolute content")
+	})
+
 	t.Run("Load YAML file with command execution", func(t *testing.T) {
 		loadFunc := loader.NewYAMLLoader("testdata/with_command.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)

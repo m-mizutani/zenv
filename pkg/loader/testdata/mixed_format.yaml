@@ -9,7 +9,7 @@ DATABASE_URL:
   value: "postgres://localhost/mydb"
 
 SSL_CERT:
-  file: "testdata/config_content.txt"
+  file: "config_content.txt"
 
 LOG_LEVEL:
   value: "info"
