@@ -69,7 +69,7 @@ func TestYAMLLoader(t *testing.T) {
 		gt.NoError(t, os.WriteFile(absPath, []byte("absolute content"), 0600))
 
 		// Create a YAML file referencing the absolute path
-		yamlContent := "ABS_VAR:\n  file: \"" + absPath + "\"\n"
+		yamlContent := "ABS_VAR:\n  file: '" + absPath + "'\n"
 		yamlPath := filepath.Join(tmpDir, ".env.yaml")
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0600))
 
