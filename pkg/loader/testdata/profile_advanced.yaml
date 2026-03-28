@@ -1,12 +1,12 @@
 # Test advanced features with profiles
 
 SSL_CERT:
-  file: "testdata/config_content.txt"
+  file: "config_content.txt"
   profile:
     dev:
       value: "-----BEGIN CERTIFICATE-----\ndev-cert-content\n-----END CERTIFICATE-----"
     prod:
-      file: "testdata/config_content.txt"
+      file: "config_content.txt"
 
 HOSTNAME:
   command: ["echo", "default-host"]

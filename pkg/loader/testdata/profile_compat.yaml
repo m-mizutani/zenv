@@ -9,7 +9,7 @@ COMPLEX_VAR:
 
 # Section with file reference, no profile
 FILE_VAR:
-  file: "testdata/config_content.txt"
+  file: "config_content.txt"
 
 # New format with profile
 PROFILE_VAR:

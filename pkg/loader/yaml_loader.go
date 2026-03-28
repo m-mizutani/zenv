@@ -42,7 +42,8 @@ func NewYAMLLoaderWithProfile(path string, profile string, existingVars ...[]*mo
 		}
 
 		// Create unified resolver with existing variables
-		resolver := newYAMLUnifiedResolverWithProfileAndVars(config, profile, allExistingVars)
+		baseDir := filepath.Dir(path)
+		resolver := newYAMLUnifiedResolverWithProfileAndVars(config, profile, baseDir, allExistingVars)
 
 		// Resolve all variables
 		var envVars []*model.EnvVar
@@ -308,12 +309,13 @@ func executeYAMLCommand(command []string) (string, error) {
 type yamlUnifiedResolver struct {
 	config       model.YAMLConfig
 	profile      string
+	baseDir      string // Base directory for resolving relative file paths
 	resolvedVars map[string]string
 	resolving    map[string]bool   // Track variables currently being resolved
 	externalVars map[string]string // Variables from .env files, system environment, and other sources
 }
 
-func newYAMLUnifiedResolverWithProfileAndVars(config model.YAMLConfig, profile string, existingVars []*model.EnvVar) *yamlUnifiedResolver {
+func newYAMLUnifiedResolverWithProfileAndVars(config model.YAMLConfig, profile string, baseDir string, existingVars []*model.EnvVar) *yamlUnifiedResolver {
 	// Cache all external variables (system environment + .env files, etc.)
 	externalVars := make(map[string]string)
 
@@ -335,6 +337,7 @@ func newYAMLUnifiedResolverWithProfileAndVars(config model.YAMLConfig, profile s
 	return &yamlUnifiedResolver{
 		config:       config,
 		profile:      profile,
+		baseDir:      baseDir,
 		resolvedVars: make(map[string]string),
 		resolving:    make(map[string]bool),
 		externalVars: externalVars,
@@ -430,7 +433,11 @@ func (r *yamlUnifiedResolver) resolveWithValue(key string, config *model.YAMLVal
 		}
 
 	case config.File != nil:
-		resolvedValue, err = readYAMLFile(*config.File)
+		filePath := *config.File
+		if !filepath.IsAbs(filePath) && r.baseDir != "" {
+			filePath = filepath.Join(r.baseDir, filePath)
+		}
+		resolvedValue, err = readYAMLFile(filePath)
 		if err != nil {
 			return "", goerr.Wrap(err, "failed to read file",
 				goerr.V("file", *config.File))
