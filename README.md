@@ -1,8 +1,5 @@
 # zenv [![CI](https://github.com/m-mizutani/zenv/actions/workflows/test.yml/badge.svg)](https://github.com/m-mizutani/zenv/actions/workflows/test.yml) [![Security Scan](https://github.com/m-mizutani/zenv/actions/workflows/gosec.yml/badge.svg)](https://github.com/m-mizutani/zenv/actions/workflows/gosec.yml) [![Vuln scan](https://github.com/m-mizutani/zenv/actions/workflows/trivy.yml/badge.svg)](https://github.com/m-mizutani/zenv/actions/workflows/trivy.yml) <!-- omit in toc -->
 
-> **⚠️ Breaking Changes in v2**
-> Version 2 introduces significant changes including new YAML configuration support, modified CLI options, and updated variable precedence. See [Migration Guide](docs/migration.md) for detailed migration instructions.
-
 `zenv` is enhanced `env` command to manage environment variables in CLI.
 
 ```yaml
