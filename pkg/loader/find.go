@@ -8,6 +8,7 @@ import (
 var (
 	defaultDotEnvFiles = []string{".env"}
 	defaultYAMLFiles   = []string{".env.yaml", ".env.yml"}
+	defaultHCLFiles    = []string{".env.hcl"}
 )
 
 // FindFileUpward searches for a file by traversing parent directories.
@@ -43,6 +44,23 @@ func ResolveDefaultDotEnvPath() string {
 // searching parent directories from the current working directory.
 func ResolveDefaultYAMLPath() string {
 	return resolveDefault(defaultYAMLFiles)
+}
+
+// ResolveDefaultHCLPath returns the default HCL config file path,
+// searching parent directories from the current working directory.
+// Returns the fallback filename if not found.
+func ResolveDefaultHCLPath() string {
+	return resolveDefault(defaultHCLFiles)
+}
+
+// FindDefaultHCLPath returns the discovered HCL config file path, or
+// empty string if no .env.hcl exists in the working directory or its ancestors.
+func FindDefaultHCLPath() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return FindFileUpward(wd, defaultHCLFiles...)
 }
 
 func resolveDefault(filenames []string) string {

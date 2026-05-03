@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/m-mizutani/clog"
@@ -17,6 +18,15 @@ import (
 	"github.com/m-mizutani/zenv/v2/pkg/usecase"
 	"golang.org/x/term"
 )
+
+// newConfigLoader picks the appropriate loader based on the file extension.
+// Files ending in .hcl use the HCL loader; everything else falls back to YAML.
+func newConfigLoader(path, profile string, existingVars []*model.EnvVar) loader.LoadFunc {
+	if strings.EqualFold(filepath.Ext(path), ".hcl") {
+		return loader.NewHCLLoaderWithProfile(path, profile, existingVars)
+	}
+	return loader.NewYAMLLoaderWithProfile(path, profile, existingVars)
+}
 
 // Format represents the log output format
 type Format int
@@ -196,13 +206,18 @@ func Run(ctx context.Context, args []string) error {
 	}
 	allExistingVars = append(allExistingVars, loadedDotEnvVars...)
 
-	// Now create YAML loaders with all existing variables and profile
-	var yamlLoaders []loader.LoadFunc
+	// Now create config loaders (HCL or YAML, picked by extension) with profile and existing vars
+	var configLoaders []loader.LoadFunc
 	for _, configFile := range configFiles {
-		yamlLoaders = append(yamlLoaders, loader.NewYAMLLoaderWithProfile(configFile, profile, allExistingVars))
+		configLoaders = append(configLoaders, newConfigLoader(configFile, profile, allExistingVars))
 	}
 	if len(configFiles) == 0 {
-		yamlLoaders = append(yamlLoaders, loader.NewYAMLLoaderWithProfile(loader.ResolveDefaultYAMLPath(), profile, allExistingVars))
+		// Default path resolution: prefer .env.hcl if present (do not merge with YAML).
+		if hclPath := loader.FindDefaultHCLPath(); hclPath != "" {
+			configLoaders = append(configLoaders, loader.NewHCLLoaderWithProfile(hclPath, profile, allExistingVars))
+		} else {
+			configLoaders = append(configLoaders, loader.NewYAMLLoaderWithProfile(loader.ResolveDefaultYAMLPath(), profile, allExistingVars))
+		}
 	}
 
 	// Combine all loaders for the usecase
@@ -211,7 +226,7 @@ func Run(ctx context.Context, args []string) error {
 	loaders = append(loaders, func(ctx context.Context) ([]*model.EnvVar, error) {
 		return loadedDotEnvVars, nil
 	})
-	loaders = append(loaders, yamlLoaders...)
+	loaders = append(loaders, configLoaders...)
 
 	// Create executor and usecase
 	exec := executor.NewDefaultExecutor()
