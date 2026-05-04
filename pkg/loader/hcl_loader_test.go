@@ -97,18 +97,37 @@ func TestHCLLoaderSyntaxError(t *testing.T) {
 }
 
 func TestHCLLoaderDuplicateName(t *testing.T) {
-	tmp := t.TempDir()
-	path := filepath.Join(tmp, "dup.hcl")
-	content := `FOO = "x"
+	t.Run("attribute and block share a name", func(t *testing.T) {
+		tmp := t.TempDir()
+		path := filepath.Join(tmp, "dup_attr_block.hcl")
+		content := `FOO = "x"
 FOO {
   value = "y"
 }
 `
-	gt.NoError(t, os.WriteFile(path, []byte(content), 0600))
+		gt.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
-	loadFunc := loader.NewHCLLoader(path)
-	_, err := loadFunc(context.Background())
-	gt.Error(t, err)
+		loadFunc := loader.NewHCLLoader(path)
+		_, err := loadFunc(context.Background())
+		gt.Error(t, err)
+	})
+
+	t.Run("two blocks share a name", func(t *testing.T) {
+		tmp := t.TempDir()
+		path := filepath.Join(tmp, "dup_block_block.hcl")
+		content := `FOO {
+  value = "x"
+}
+FOO {
+  value = "y"
+}
+`
+		gt.NoError(t, os.WriteFile(path, []byte(content), 0600))
+
+		loadFunc := loader.NewHCLLoader(path)
+		_, err := loadFunc(context.Background())
+		gt.Error(t, err)
+	})
 }
 
 func TestHCLLoaderConflictingValueTypes(t *testing.T) {

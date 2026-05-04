@@ -127,7 +127,7 @@ func parseHCLBody(body *hclsyntax.Body) (model.YAMLConfig, error) {
 	for _, block := range body.Blocks {
 		name := block.Type
 		if _, exists := config[name]; exists {
-			return nil, goerr.New("duplicate variable name (defined as both attribute and block)",
+			return nil, goerr.New("duplicate variable name",
 				goerr.V("name", name))
 		}
 		if len(block.Labels) > 0 {
