@@ -64,7 +64,7 @@ func NewHCLLoaderWithProfile(path string, profile string, existingVars ...[]*mod
 			envVars = append(envVars, &model.EnvVar{
 				Name:   key,
 				Value:  resolvedValue,
-				Source: model.SourceYAML,
+				Source: model.SourceHCL,
 				Secret: value.Secret || effectiveValue.Secret,
 			})
 		}

@@ -33,7 +33,7 @@ func TestHCLLoaderBasic(t *testing.T) {
 	gt.Equal(t, got["APP_HOME"].Value, "/home/zenv-test")
 
 	for _, ev := range envVars {
-		gt.Equal(t, ev.Source, model.SourceYAML)
+		gt.Equal(t, ev.Source, model.SourceHCL)
 	}
 }
 
