@@ -19,6 +19,7 @@ const (
 	SourceDotEnv
 	SourceYAML
 	SourceInline
+	SourceHCL
 )
 
 // ExecutorError represents an error from command execution.

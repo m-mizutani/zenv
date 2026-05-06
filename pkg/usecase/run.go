@@ -160,6 +160,8 @@ func showEnvVars(envVars []*model.EnvVar) {
 			sourceStr = ".env"
 		case model.SourceYAML:
 			sourceStr = ".yaml"
+		case model.SourceHCL:
+			sourceStr = ".hcl"
 		case model.SourceInline:
 			sourceStr = "inline"
 		}

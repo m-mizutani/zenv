@@ -191,6 +191,72 @@ ANOTHER_VAR:
 		gt.S(t, string(output)).Contains("LIST_VAR=list_value")
 	})
 
+	t.Run("Run with -c option (.hcl file)", func(t *testing.T) {
+		tmpFile := gt.R1(os.CreateTemp("", "test*.hcl")).NoError(t)
+		defer os.Remove(tmpFile.Name())
+
+		content := `TEST_VAR = "test_value"
+
+ANOTHER_VAR {
+  value = "another_value"
+}
+`
+		gt.R1(tmpFile.WriteString(content)).NoError(t)
+		tmpFile.Close()
+
+		r, w, _ := os.Pipe()
+		oldStdout := os.Stdout
+		os.Stdout = w
+
+		args := []string{"zenv", "-c", tmpFile.Name()}
+		err := cli.Run(context.Background(), args)
+
+		w.Close()
+		os.Stdout = oldStdout
+		output := gt.R1(io.ReadAll(r)).NoError(t)
+
+		gt.NoError(t, err)
+		gt.S(t, string(output)).Contains("TEST_VAR=test_value")
+		gt.S(t, string(output)).Contains("ANOTHER_VAR=another_value")
+	})
+
+	t.Run("Default path: .env.hcl takes precedence over .env.yaml", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		hclContent := `FROM_HCL = "hcl_wins"
+`
+		gt.NoError(t, os.WriteFile(tmpDir+"/.env.hcl", []byte(hclContent), 0600))
+
+		yamlContent := `FROM_YAML:
+  value: "yaml_value"
+FROM_HCL:
+  value: "yaml_loses"
+`
+		gt.NoError(t, os.WriteFile(tmpDir+"/.env.yaml", []byte(yamlContent), 0600))
+
+		oldWd := gt.R1(os.Getwd()).NoError(t)
+		gt.NoError(t, os.Chdir(tmpDir))
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		r, w, _ := os.Pipe()
+		oldStdout := os.Stdout
+		os.Stdout = w
+
+		args := []string{"zenv"}
+		err := cli.Run(context.Background(), args)
+
+		w.Close()
+		os.Stdout = oldStdout
+		output := gt.R1(io.ReadAll(r)).NoError(t)
+
+		gt.NoError(t, err)
+		// HCL value wins
+		gt.S(t, string(output)).Contains("FROM_HCL=hcl_wins")
+		// YAML is fully ignored
+		gt.S(t, string(output)).NotContains("FROM_YAML=yaml_value")
+		gt.S(t, string(output)).NotContains("hcl_loses")
+	})
+
 	t.Run("Handle non-existent file gracefully", func(t *testing.T) {
 		// Capture stdout to prevent flooding test output
 		r, w, _ := os.Pipe()
