@@ -79,6 +79,18 @@ func NewLoggerWithFormat(level slog.Level, w io.Writer, format Format) *slog.Log
 	return slog.New(handler)
 }
 
+// isTruthyEnv reports whether the given environment variable string should be
+// treated as enabling a boolean flag. Accepts the common conventions ("1",
+// "true", "yes", "on") case-insensitively. An empty string is false.
+func isTruthyEnv(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 // ParseLogLevel parses a string log level to slog.Level
 func ParseLogLevel(level string) slog.Level {
 	switch level {
@@ -133,6 +145,11 @@ func Run(ctx context.Context, args []string) error {
 			Usage:     "Enable template expansion for command arguments using text/template syntax",
 			IsBoolean: true,
 		},
+		{
+			Name:      "redact",
+			Usage:     "Redact secret values from the child process's stdout/stderr (also enabled by ZENV_REDACT=1)",
+			IsBoolean: true,
+		},
 	})
 	if err != nil {
 		return goerr.Wrap(err, "failed to create parser")
@@ -161,6 +178,7 @@ func Run(ctx context.Context, args []string) error {
 	logLevel := result.Options["log-level"].String()
 	profile := result.Options["profile"].String()
 	enableTemplate := result.Options["template"].IsSet()
+	redactEnabled := result.Options["redact"].IsSet() || isTruthyEnv(os.Getenv("ZENV_REDACT"))
 	commandArgs := result.Args
 
 	// Create logger based on log-level flag
@@ -230,7 +248,7 @@ func Run(ctx context.Context, args []string) error {
 	loaders = append(loaders, configLoaders...)
 
 	// Create executor and usecase
-	exec := executor.NewDefaultExecutor()
+	exec := executor.NewDefaultExecutor(executor.Options{Redact: redactEnabled})
 	uc := usecase.NewUseCase(loaders, exec)
 	uc.EnableTemplate = enableTemplate
 

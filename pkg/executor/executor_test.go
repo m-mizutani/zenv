@@ -17,7 +17,7 @@ import (
 func TestDefaultExecutor(t *testing.T) {
 
 	t.Run("Execute simple command successfully", func(t *testing.T) {
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
 		envVars := []*model.EnvVar{
 			{Name: "TEST_VAR", Value: "test_value", Source: model.SourceSystem},
 		}
@@ -27,7 +27,7 @@ func TestDefaultExecutor(t *testing.T) {
 	})
 
 	t.Run("Execute command with environment variables", func(t *testing.T) {
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
 		envVars := []*model.EnvVar{
 			{Name: "TEST_VAR", Value: "test_value", Source: model.SourceSystem},
 			{Name: "ANOTHER_VAR", Value: "another_value", Source: model.SourceDotEnv},
@@ -39,7 +39,7 @@ func TestDefaultExecutor(t *testing.T) {
 	})
 
 	t.Run("Handle command that returns non-zero exit code", func(t *testing.T) {
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
 		envVars := []*model.EnvVar{}
 
 		// Test with a command that exits with code 1
@@ -50,7 +50,7 @@ func TestDefaultExecutor(t *testing.T) {
 	})
 
 	t.Run("Handle command that returns different exit code", func(t *testing.T) {
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
 		envVars := []*model.EnvVar{}
 
 		// Test with a command that exits with code 42
@@ -61,7 +61,7 @@ func TestDefaultExecutor(t *testing.T) {
 	})
 
 	t.Run("Handle non-existent command", func(t *testing.T) {
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
 		envVars := []*model.EnvVar{}
 
 		err := execFunc(context.Background(), "nonexistentcommand123", []string{"a", "b"}, envVars)
@@ -89,7 +89,7 @@ func TestDefaultExecutor(t *testing.T) {
 		path := filepath.Join(dir, "not-executable")
 		gt.NoError(t, os.WriteFile(path, []byte("hello\n"), 0o644))
 
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
 		err := execFunc(context.Background(), path, []string{}, nil)
 		gt.Error(t, err)
 
@@ -104,7 +104,7 @@ func TestDefaultExecutor(t *testing.T) {
 	})
 
 	t.Run("Execute command with empty arguments", func(t *testing.T) {
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
 		envVars := []*model.EnvVar{
 			{Name: "TEST_VAR", Value: "test_value", Source: model.SourceSystem},
 		}
@@ -114,7 +114,7 @@ func TestDefaultExecutor(t *testing.T) {
 	})
 
 	t.Run("Pass through stdout and stderr", func(t *testing.T) {
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
 		envVars := []*model.EnvVar{}
 
 		// Command that produces output on stdout
@@ -127,7 +127,7 @@ func TestDefaultExecutor(t *testing.T) {
 	})
 
 	t.Run("Execute command with multiple arguments", func(t *testing.T) {
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
 		envVars := []*model.EnvVar{}
 
 		err := execFunc(context.Background(), "echo", []string{"arg1", "arg2", "arg3"}, envVars)
@@ -135,7 +135,7 @@ func TestDefaultExecutor(t *testing.T) {
 	})
 
 	t.Run("Execute command with special characters in arguments", func(t *testing.T) {
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
 		envVars := []*model.EnvVar{}
 
 		// Test with various special characters
@@ -145,7 +145,7 @@ func TestDefaultExecutor(t *testing.T) {
 	})
 
 	t.Run("Environment variables are properly set", func(t *testing.T) {
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
 		envVars := []*model.EnvVar{
 			{Name: "CUSTOM_VAR", Value: "custom_value", Source: model.SourceInline},
 		}
@@ -155,7 +155,10 @@ func TestDefaultExecutor(t *testing.T) {
 		gt.NoError(t, err)
 	})
 
-	t.Run("Redact secret values in stdout", func(t *testing.T) {
+	t.Run("Default mode does not redact secret env values", func(t *testing.T) {
+		// Without Redact: true, secret values must appear verbatim because
+		// the child inherits the parent's fds directly and there is no
+		// redactor in the pipeline. This is the documented default.
 		r, w, pipeErr := os.Pipe()
 		gt.NoError(t, pipeErr)
 
@@ -163,7 +166,31 @@ func TestDefaultExecutor(t *testing.T) {
 		os.Stdout = w
 		defer func() { os.Stdout = oldStdout }()
 
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{})
+		envVars := []*model.EnvVar{
+			{Name: "SECRET_TOKEN", Value: "my-secret-456", Source: model.SourceYAML, Secret: true},
+		}
+
+		err := execFunc(context.Background(), "sh", []string{"-c", "echo my-secret-456"}, envVars)
+		gt.NoError(t, err)
+
+		gt.NoError(t, w.Close())
+		output, readErr := io.ReadAll(r)
+		gt.NoError(t, readErr)
+
+		gt.S(t, string(output)).Contains("my-secret-456")
+		gt.S(t, string(output)).NotContains("*****")
+	})
+
+	t.Run("Redact secret values in stdout when Redact is enabled", func(t *testing.T) {
+		r, w, pipeErr := os.Pipe()
+		gt.NoError(t, pipeErr)
+
+		oldStdout := os.Stdout
+		os.Stdout = w
+		defer func() { os.Stdout = oldStdout }()
+
+		execFunc := executor.NewDefaultExecutor(executor.Options{Redact: true})
 		envVars := []*model.EnvVar{
 			{Name: "SECRET_TOKEN", Value: "my-secret-123", Source: model.SourceYAML, Secret: true},
 			{Name: "PUBLIC_VAR", Value: "visible", Source: model.SourceDotEnv},
@@ -181,7 +208,7 @@ func TestDefaultExecutor(t *testing.T) {
 		gt.S(t, string(output)).Contains("visible")
 	})
 
-	t.Run("Redact secret values in stderr", func(t *testing.T) {
+	t.Run("Redact secret values in stderr when Redact is enabled", func(t *testing.T) {
 		r, w, pipeErr := os.Pipe()
 		gt.NoError(t, pipeErr)
 
@@ -189,7 +216,7 @@ func TestDefaultExecutor(t *testing.T) {
 		os.Stderr = w
 		defer func() { os.Stderr = oldStderr }()
 
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{Redact: true})
 		envVars := []*model.EnvVar{
 			{Name: "SECRET_TOKEN", Value: "my-secret-123", Source: model.SourceYAML, Secret: true},
 		}
@@ -205,7 +232,7 @@ func TestDefaultExecutor(t *testing.T) {
 		gt.S(t, string(output)).Contains("*****")
 	})
 
-	t.Run("No redaction when no secret env vars", func(t *testing.T) {
+	t.Run("No redaction when Redact is enabled but no secret env vars", func(t *testing.T) {
 		r, w, pipeErr := os.Pipe()
 		gt.NoError(t, pipeErr)
 
@@ -213,7 +240,7 @@ func TestDefaultExecutor(t *testing.T) {
 		os.Stdout = w
 		defer func() { os.Stdout = oldStdout }()
 
-		execFunc := executor.NewDefaultExecutor()
+		execFunc := executor.NewDefaultExecutor(executor.Options{Redact: true})
 		envVars := []*model.EnvVar{
 			{Name: "PUBLIC_VAR", Value: "visible", Source: model.SourceDotEnv},
 		}

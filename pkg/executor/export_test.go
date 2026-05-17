@@ -1,6 +1,19 @@
 package executor
 
-import "io"
+import (
+	"context"
+	"io"
+	"os/exec"
+)
+
+// RunWithPtyForTest exposes runWithPty for tests on platforms that support pty.
+// On Windows, runWithPty is a stub; tests guarding on build tag should skip.
+func RunWithPtyForTest(ctx context.Context, cmd *exec.Cmd, secrets []string) error {
+	return runWithPty(ctx, cmd, secrets)
+}
+
+// PtySupportedForTest exposes ptySupported for tests.
+func PtySupportedForTest() bool { return ptySupported() }
 
 // RedactWriterForTest wraps redactWriter for testing.
 type RedactWriterForTest struct {
