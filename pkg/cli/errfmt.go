@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
@@ -140,17 +141,16 @@ func formatErrorBody(w *errWriter, err error, indent int) {
 func sourceLine(err error, w *errWriter) string {
 	var ve *model.VariableError
 	if errors.As(err, &ve) {
-		var parts []string
-		if ve.Path != "" {
-			parts = append(parts, ve.Path)
-		}
-		if ve.Profile != "" {
-			parts = append(parts, fmt.Sprintf("profile: %s", ve.Profile))
-		}
-		if len(parts) == 0 {
+		switch {
+		case ve.Path != "" && ve.Profile != "":
+			return w.writeCyan("Source: ") + ve.Path + "  (profile: " + ve.Profile + ")"
+		case ve.Path != "":
+			return w.writeCyan("Source: ") + ve.Path
+		case ve.Profile != "":
+			return w.writeCyan("Source: ") + "profile: " + ve.Profile
+		default:
 			return ""
 		}
-		return w.writeCyan("Source: ") + strings.Join(parts, "  (") + closeParenIfProfile(ve.Profile)
 	}
 	var cfe *model.ConfigFileError
 	if errors.As(err, &cfe) {
@@ -160,13 +160,6 @@ func sourceLine(err error, w *errWriter) string {
 		return w.writeCyan("Source: ") + cfe.Path
 	}
 	return ""
-}
-
-func closeParenIfProfile(p string) string {
-	if p == "" {
-		return ""
-	}
-	return ")"
 }
 
 // describeNode formats the current error node and returns (line, more, nextCause).
@@ -248,11 +241,13 @@ func causeLabel(first bool) string {
 	return "└ "
 }
 
+// capitalize uppercases the first rune of s. It walks runes (not bytes), so
+// multi-byte leading characters are handled correctly.
 func capitalize(s string) string {
-	if s == "" {
-		return s
+	for i, r := range s {
+		return string(unicode.ToUpper(r)) + s[i+len(string(r)):]
 	}
-	return strings.ToUpper(s[:1]) + s[1:]
+	return ""
 }
 
 // indentStderr inserts a prefix on each line of stderr output.

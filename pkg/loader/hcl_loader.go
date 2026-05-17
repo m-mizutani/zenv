@@ -2,6 +2,7 @@ package loader
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -135,8 +136,9 @@ func loadHCLFile(ctx context.Context, path string) (model.YAMLConfig, error) {
 	if err != nil {
 		// parseHCLBody returns goerr-based schema errors; wrap them as
 		// ConfigFileError so the formatter can attach the file path.
-		// Pass through if already typed.
-		if _, ok := err.(*model.ConfigFileError); ok {
+		// Pass through if already typed (even when wrapped).
+		var cfe *model.ConfigFileError
+		if errors.As(err, &cfe) {
 			return nil, err
 		}
 		return nil, &model.ConfigFileError{

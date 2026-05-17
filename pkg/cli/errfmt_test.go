@@ -64,6 +64,30 @@ func TestFormatError_RealisticChain(t *testing.T) {
 	gt.S(t, got).NotContains("error.stacktrace").NotContains("Stacktrace:")
 }
 
+func TestFormatError_Source_ProfileOnlyOrPathOnly(t *testing.T) {
+	t.Run("path only", func(t *testing.T) {
+		err := &model.VariableError{Key: "X", Path: ".env.hcl", Cause: errors.New("boom")}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).Contains("Source: .env.hcl").NotContains("(")
+	})
+	t.Run("profile only", func(t *testing.T) {
+		err := &model.VariableError{Key: "X", Profile: "dev", Cause: errors.New("boom")}
+		got := cli.FormatError(err, false, false)
+		// Should not produce stray closing paren like "profile: dev)".
+		gt.S(t, got).Contains("Source: profile: dev").NotContains(")")
+	})
+	t.Run("both", func(t *testing.T) {
+		err := &model.VariableError{Key: "X", Path: ".env.hcl", Profile: "dev", Cause: errors.New("boom")}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).Contains("Source: .env.hcl  (profile: dev)")
+	})
+	t.Run("neither", func(t *testing.T) {
+		err := &model.VariableError{Key: "X", Cause: errors.New("boom")}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).NotContains("Source:")
+	})
+}
+
 func TestFormatError_RefNotFound_WithSuggestion(t *testing.T) {
 	err := &model.VariableError{
 		Key: "FOO", Path: ".env.hcl",
