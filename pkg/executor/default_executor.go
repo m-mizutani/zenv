@@ -119,10 +119,10 @@ func stdoutIsTTY() bool {
 func wrapExitError(logger *slog.Logger, command *exec.Cmd, err error) error {
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
-		exitCode := 1
-		if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-			exitCode = status.ExitStatus()
-		}
+		// (*exec.ExitError).ExitCode reports the child's exit status in a
+		// cross-platform way (no need to type-assert to syscall.WaitStatus)
+		// and returns -1 when the child was killed by a signal.
+		exitCode := exitError.ExitCode()
 		logger.Debug("command exited with non-zero code", "cmd", command.Path, "exit_code", exitCode)
 		return model.NewExecutorError(err, exitCode)
 	}
