@@ -31,13 +31,17 @@ func (f ConfigFormat) String() string {
 type ConfigFileReason int
 
 const (
-	// ReasonNotReadable indicates the file could not be opened or read.
+	// ReasonNotReadable indicates the file could not be opened or read
+	// (e.g. permission denied).
 	ReasonNotReadable ConfigFileReason = iota
 	// ReasonParseError indicates a syntactic parse failure.
 	ReasonParseError
 	// ReasonInvalidSchema indicates a semantically invalid configuration
 	// (unknown attribute, mutually exclusive fields, duplicate names, ...).
 	ReasonInvalidSchema
+	// ReasonNotFound indicates an explicitly requested file does not exist.
+	// Distinct from ReasonNotReadable so the user sees a different message.
+	ReasonNotFound
 )
 
 func (r ConfigFileReason) String() string {
@@ -48,6 +52,8 @@ func (r ConfigFileReason) String() string {
 		return "parse error"
 	case ReasonInvalidSchema:
 		return "invalid schema"
+	case ReasonNotFound:
+		return "not found"
 	default:
 		return "unknown"
 	}
@@ -73,6 +79,8 @@ func (e *ConfigFileError) Error() string {
 		b.WriteString("cannot parse ")
 	case ReasonInvalidSchema:
 		b.WriteString("invalid ")
+	case ReasonNotFound:
+		b.WriteString("missing ")
 	default:
 		b.WriteString("error in ")
 	}
@@ -326,6 +334,48 @@ func (e *CommandLaunchError) ExitCode() int {
 	default:
 		return 1
 	}
+}
+
+// ProfileNotFoundError indicates the user-supplied profile name was not
+// defined in any of the loaded configuration files. The user explicitly asked
+// for a profile, so silently falling back to the default would mask the bug.
+type ProfileNotFoundError struct {
+	Profile string
+	// Available is the sorted, deduplicated list of profile names that were
+	// found across every scanned configuration file. May be empty.
+	Available []string
+	// Paths is the list of configuration files that were scanned. May be empty
+	// when no configuration file was discovered at all.
+	Paths []string
+}
+
+func (e *ProfileNotFoundError) Error() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "profile %q not found", e.Profile)
+	if len(e.Available) > 0 {
+		fmt.Fprintf(&b, " (available: %s)", strings.Join(e.Available, ", "))
+	} else if len(e.Paths) == 0 {
+		b.WriteString(" (no configuration file was loaded)")
+	} else {
+		b.WriteString(" (no profiles defined in any loaded configuration)")
+	}
+	return b.String()
+}
+
+// InvalidLogLevelError indicates the user-supplied --log-level value was not
+// one of the recognized log levels.
+type InvalidLogLevelError struct {
+	Value string
+	// Allowed is the list of accepted log level names.
+	Allowed []string
+}
+
+func (e *InvalidLogLevelError) Error() string {
+	if len(e.Allowed) == 0 {
+		return fmt.Sprintf("invalid log level %q", e.Value)
+	}
+	return fmt.Sprintf("invalid log level %q (expected one of: %s)",
+		e.Value, strings.Join(e.Allowed, ", "))
 }
 
 // TruncateStderr returns the trailing portion of s, never exceeding limit

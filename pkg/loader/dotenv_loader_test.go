@@ -30,7 +30,7 @@ KEY4=value with spaces`
 		tmpFile.Close()
 
 		// Test loader
-		loadFunc := loader.NewDotEnvLoader(tmpFile.Name())
+		loadFunc := loader.NewDotEnvLoader(tmpFile.Name(), false)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 4)
@@ -51,10 +51,21 @@ KEY4=value with spaces`
 		}
 	})
 
-	t.Run("Handle non-existent file", func(t *testing.T) {
-		loadFunc := loader.NewDotEnvLoader("non_existent.env")
+	t.Run("Handle non-existent file when mustExist=false", func(t *testing.T) {
+		loadFunc := loader.NewDotEnvLoader("non_existent.env", false)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 		gt.Nil(t, envVars)
+	})
+
+	t.Run("Error on non-existent file when mustExist=true", func(t *testing.T) {
+		loadFunc := loader.NewDotEnvLoader("non_existent.env", true)
+		_, err := loadFunc(context.Background())
+		gt.Error(t, err)
+		var cfgErr *model.ConfigFileError
+		gt.True(t, errors.As(err, &cfgErr))
+		gt.Equal(t, cfgErr.Format, model.FormatDotEnv)
+		gt.Equal(t, cfgErr.Reason, model.ReasonNotFound)
+		gt.Equal(t, cfgErr.Path, "non_existent.env")
 	})
 
 	t.Run("Handle invalid format", func(t *testing.T) {
@@ -69,7 +80,7 @@ VALID_KEY=valid_value`
 		tmpFile.Close()
 
 		// Test loader
-		loadFunc := loader.NewDotEnvLoader(tmpFile.Name())
+		loadFunc := loader.NewDotEnvLoader(tmpFile.Name(), false)
 		_, err := loadFunc(context.Background())
 
 		gt.Error(t, err)
@@ -97,7 +108,7 @@ KEY2=value2
 		tmpFile.Close()
 
 		// Test loader
-		loadFunc := loader.NewDotEnvLoader(tmpFile.Name())
+		loadFunc := loader.NewDotEnvLoader(tmpFile.Name(), false)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 2)

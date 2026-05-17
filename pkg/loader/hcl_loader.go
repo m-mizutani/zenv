@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -15,17 +16,20 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
-// NewHCLLoader creates a loader for HCL configuration files.
-func NewHCLLoader(path string, existingVars ...[]*model.EnvVar) LoadFunc {
-	return NewHCLLoaderWithProfile(path, "", existingVars...)
+// NewHCLLoader creates a loader for HCL configuration files. When mustExist is
+// true, a missing file is reported as an error; otherwise it is silently
+// skipped (used for the default .env.hcl path).
+func NewHCLLoader(path string, mustExist bool, existingVars ...[]*model.EnvVar) LoadFunc {
+	return NewHCLLoaderWithProfile(path, "", mustExist, existingVars...)
 }
 
 // NewHCLLoaderWithProfile creates a profile-aware loader for HCL configuration files.
-func NewHCLLoaderWithProfile(path string, profile string, existingVars ...[]*model.EnvVar) LoadFunc {
+// See NewHCLLoader for the mustExist semantics.
+func NewHCLLoaderWithProfile(path string, profile string, mustExist bool, existingVars ...[]*model.EnvVar) LoadFunc {
 	return func(ctx context.Context) ([]*model.EnvVar, error) {
 		logger := ctxlog.From(ctx)
 
-		config, err := loadHCLFile(ctx, path)
+		config, err := loadHCLFile(ctx, path, mustExist)
 		if err != nil {
 			return nil, err
 		}
@@ -85,11 +89,19 @@ func NewHCLLoaderWithProfile(path string, profile string, existingVars ...[]*mod
 	}
 }
 
-func loadHCLFile(ctx context.Context, path string) (model.YAMLConfig, error) {
+func loadHCLFile(ctx context.Context, path string, mustExist bool) (model.YAMLConfig, error) {
 	logger := ctxlog.From(ctx)
 
 	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
+			if mustExist {
+				return nil, &model.ConfigFileError{
+					Path:   path,
+					Format: model.FormatHCL,
+					Reason: model.ReasonNotFound,
+					Cause:  err,
+				}
+			}
 			return nil, nil
 		}
 		return nil, &model.ConfigFileError{

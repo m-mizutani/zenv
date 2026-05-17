@@ -2,12 +2,16 @@ package cli_test
 
 import (
 	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/m-mizutani/gt"
 	"github.com/m-mizutani/zenv/v2/pkg/cli"
+	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
 func TestCLI(t *testing.T) {
@@ -257,22 +261,149 @@ FROM_HCL:
 		gt.S(t, string(output)).NotContains("hcl_loses")
 	})
 
-	t.Run("Handle non-existent file gracefully", func(t *testing.T) {
-		// Capture stdout to prevent flooding test output
+	t.Run("Explicit -e with missing file errors out", func(t *testing.T) {
+		args := []string{"zenv", "-e", "/definitely/not/here.env"}
+		err := cli.Run(context.Background(), args)
+
+		gt.Error(t, err)
+		var cfgErr *model.ConfigFileError
+		gt.True(t, errors.As(err, &cfgErr))
+		gt.Equal(t, cfgErr.Format, model.FormatDotEnv)
+		gt.Equal(t, cfgErr.Reason, model.ReasonNotFound)
+	})
+
+	t.Run("Explicit -c with missing YAML file errors out", func(t *testing.T) {
+		args := []string{"zenv", "-c", "/definitely/not/here.yaml"}
+		err := cli.Run(context.Background(), args)
+
+		gt.Error(t, err)
+		var cfgErr *model.ConfigFileError
+		gt.True(t, errors.As(err, &cfgErr))
+		gt.Equal(t, cfgErr.Format, model.FormatYAML)
+		gt.Equal(t, cfgErr.Reason, model.ReasonNotFound)
+	})
+
+	t.Run("Explicit -c with missing HCL file errors out", func(t *testing.T) {
+		args := []string{"zenv", "-c", "/definitely/not/here.hcl"}
+		err := cli.Run(context.Background(), args)
+
+		gt.Error(t, err)
+		var cfgErr *model.ConfigFileError
+		gt.True(t, errors.As(err, &cfgErr))
+		gt.Equal(t, cfgErr.Format, model.FormatHCL)
+		gt.Equal(t, cfgErr.Reason, model.ReasonNotFound)
+	})
+
+	t.Run("Invalid log level value errors out", func(t *testing.T) {
+		args := []string{"zenv", "-l", "noisy"}
+		err := cli.Run(context.Background(), args)
+
+		gt.Error(t, err)
+		var lvlErr *model.InvalidLogLevelError
+		gt.True(t, errors.As(err, &lvlErr))
+		gt.Equal(t, lvlErr.Value, "noisy")
+	})
+
+	t.Run("Unknown profile errors out", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, "config.yaml")
+		content := `API_URL:
+  value: "https://api.example.com"
+  profile:
+    dev:
+      value: "http://localhost"
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(content), 0600))
+
+		args := []string{"zenv", "-c", yamlPath, "-p", "prod"}
+		err := cli.Run(context.Background(), args)
+
+		gt.Error(t, err)
+		var pe *model.ProfileNotFoundError
+		gt.True(t, errors.As(err, &pe))
+		gt.Equal(t, pe.Profile, "prod")
+		gt.Equal(t, len(pe.Available), 1)
+		gt.Equal(t, pe.Available[0], "dev")
+	})
+
+	t.Run("Known profile succeeds preflight", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yamlPath := filepath.Join(tmpDir, "config.yaml")
+		content := `API_URL:
+  value: "default"
+  profile:
+    dev:
+      value: "dev-url"
+`
+		gt.NoError(t, os.WriteFile(yamlPath, []byte(content), 0600))
+
 		r, w, _ := os.Pipe()
 		oldStdout := os.Stdout
 		os.Stdout = w
 
-		// This should not error as non-existent files return nil, nil
-		args := []string{"zenv", "-e", "non_existent.env"}
+		args := []string{"zenv", "-c", yamlPath, "-p", "dev"}
 		err := cli.Run(context.Background(), args)
 
-		// Restore stdout
 		w.Close()
 		os.Stdout = oldStdout
-		// Read and discard output
+		output := gt.R1(io.ReadAll(r)).NoError(t)
+
+		gt.NoError(t, err)
+		gt.S(t, string(output)).Contains("API_URL=dev-url")
+	})
+
+	t.Run("Default .env probe still tolerates absence", func(t *testing.T) {
+		// In a temp directory with no .env, .env.yaml, .env.hcl, running zenv
+		// with no flags must NOT fail just because nothing was discovered.
+		tmpDir := t.TempDir()
+		oldWd := gt.R1(os.Getwd()).NoError(t)
+		gt.NoError(t, os.Chdir(tmpDir))
+		defer func() { _ = os.Chdir(oldWd) }()
+
+		r, w, _ := os.Pipe()
+		oldStdout := os.Stdout
+		os.Stdout = w
+
+		args := []string{"zenv"}
+		err := cli.Run(context.Background(), args)
+
+		w.Close()
+		os.Stdout = oldStdout
 		gt.R1(io.ReadAll(r)).NoError(t)
 
 		gt.NoError(t, err)
+	})
+}
+
+func TestParseLogLevel(t *testing.T) {
+	t.Run("known values map to slog levels", func(t *testing.T) {
+		cases := map[string]slog.Level{
+			"debug":   slog.LevelDebug,
+			"DEBUG":   slog.LevelDebug,
+			"info":    slog.LevelInfo,
+			"warn":    slog.LevelWarn,
+			"warning": slog.LevelWarn,
+			"error":   slog.LevelError,
+		}
+		for in, want := range cases {
+			got, err := cli.ParseLogLevel(in)
+			gt.NoError(t, err)
+			gt.Equal(t, got, want)
+		}
+	})
+
+	t.Run("unknown value returns InvalidLogLevelError", func(t *testing.T) {
+		_, err := cli.ParseLogLevel("verbose")
+		gt.Error(t, err)
+		var lvlErr *model.InvalidLogLevelError
+		gt.True(t, errors.As(err, &lvlErr))
+		gt.Equal(t, lvlErr.Value, "verbose")
+	})
+
+	t.Run("empty string is rejected", func(t *testing.T) {
+		_, err := cli.ParseLogLevel("")
+		gt.Error(t, err)
+		var lvlErr *model.InvalidLogLevelError
+		gt.True(t, errors.As(err, &lvlErr))
 	})
 }
