@@ -240,9 +240,14 @@ func Run(ctx context.Context, args []string) error {
 	}
 
 	if err := uc.Run(ctx, commandArgs); err != nil {
-		// The executor's own non-zero exit already surfaces the child
-		// process's stderr to the user, so we do not double-print our own
-		// error block in that case.
+		// ExecutorError = the target command actually ran and exited non-zero.
+		// Its own stderr is already on the user's terminal, so we must NOT
+		// print another error block on top of it.
+		//
+		// Every other error path (CommandLaunchError when the child never
+		// launched, config-load failures, variable-resolution failures, ...)
+		// has produced no user-facing output yet, so it goes through the
+		// FormatError pipeline.
 		if !model.IsExecutorError(err) {
 			verbose := level <= slog.LevelDebug
 			useColor := false

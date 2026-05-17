@@ -75,6 +75,18 @@ func (w *errWriter) writeHeader(label string, err error) {
 // topSummary produces a one-line "what failed" for the outermost typed error.
 // It deliberately does not include details that belong on the indented body.
 func topSummary(err error) string {
+	var le *model.CommandLaunchError
+	if errors.As(err, &le) {
+		name := launchName(le)
+		switch le.Reason {
+		case model.LaunchNotFound:
+			return fmt.Sprintf("Command %q not found in PATH", name)
+		case model.LaunchPermissionDenied:
+			return fmt.Sprintf("Command %q is not executable", name)
+		default:
+			return fmt.Sprintf("Command %q failed to launch", name)
+		}
+	}
 	var ve *model.VariableError
 	if errors.As(err, &ve) {
 		if ve.Key != "" {
@@ -94,6 +106,16 @@ func topSummary(err error) string {
 		}
 	}
 	return err.Error()
+}
+
+// launchName returns the executable name component for display. It falls back
+// to a generic word when the command vector is empty or its first element is
+// an empty string, so the rendered message does not contain an empty `""`.
+func launchName(le *model.CommandLaunchError) string {
+	if len(le.Command) > 0 && le.Command[0] != "" {
+		return le.Command[0]
+	}
+	return "command"
 }
 
 // formatErrorBody walks the cause chain and writes the indented "Source" /
@@ -225,6 +247,18 @@ func describeNode(err error, w *errWriter, isFirstCause bool) (string, bool, err
 		return line, true, cfe.Cause
 	}
 
+	var le *model.CommandLaunchError
+	if errors.As(err, &le) && le == err {
+		// The summary header already says "Command \"x\" not found / not
+		// executable". The cause line carries the underlying OS error verbatim
+		// so the user can copy-paste it into a search.
+		if le.Cause == nil {
+			return "", true, nil
+		}
+		label := w.writeCyan(causeLabel(isFirstCause))
+		return label + le.Cause.Error(), true, nil
+	}
+
 	// Fallback: leaf or unknown error
 	if isFirstCause {
 		// No structured cause-of-cause to dig into; just print Error().
@@ -265,6 +299,21 @@ func indentStderr(s string, w *errWriter) string {
 
 // hintFor builds an actionable hint based on what's inside err.
 func hintFor(err error, w *errWriter) string {
+	var le *model.CommandLaunchError
+	if errors.As(err, &le) {
+		name := launchName(le)
+		switch le.Reason {
+		case model.LaunchNotFound:
+			line := fmt.Sprintf("Hint:  ensure %q is installed and visible from your shell PATH", name)
+			return w.writeYellow(line)
+		case model.LaunchPermissionDenied:
+			line := fmt.Sprintf("Hint:  check that %q has the executable bit set (e.g. chmod +x)", name)
+			return w.writeYellow(line)
+		default:
+			line := fmt.Sprintf("Hint:  verify that %q can be launched in your environment", name)
+			return w.writeYellow(line)
+		}
+	}
 	var cmd *model.CommandExecError
 	if errors.As(err, &cmd) {
 		line := "Hint:  ensure `" + strings.Join(cmd.Command, " ") + "` runs successfully in your shell"

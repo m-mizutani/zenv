@@ -111,6 +111,87 @@ func TestCommandExecError(t *testing.T) {
 	})
 }
 
+func TestCommandLaunchError(t *testing.T) {
+	t.Run("not-found message includes executable name", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"nonexistent", "arg1"},
+			Reason:  model.LaunchNotFound,
+		}
+		gt.S(t, err.Error()).
+			Contains("nonexistent").
+			Contains("not found").
+			Contains("PATH")
+	})
+
+	t.Run("permission-denied message includes executable name", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"/tmp/not-executable"},
+			Reason:  model.LaunchPermissionDenied,
+		}
+		gt.S(t, err.Error()).
+			Contains("/tmp/not-executable").
+			Contains("not executable")
+	})
+
+	t.Run("other reason includes underlying cause", func(t *testing.T) {
+		cause := errors.New("operation not permitted")
+		err := &model.CommandLaunchError{
+			Command: []string{"foo"},
+			Reason:  model.LaunchOther,
+			Cause:   cause,
+		}
+		gt.S(t, err.Error()).
+			Contains("foo").
+			Contains("operation not permitted")
+	})
+
+	t.Run("unwraps cause", func(t *testing.T) {
+		cause := errors.New("inner")
+		err := &model.CommandLaunchError{Command: []string{"x"}, Cause: cause}
+		gt.True(t, errors.Is(err, cause))
+	})
+
+	t.Run("exit code follows POSIX shell convention", func(t *testing.T) {
+		gt.Equal(t,
+			(&model.CommandLaunchError{Reason: model.LaunchNotFound}).ExitCode(),
+			127,
+		)
+		gt.Equal(t,
+			(&model.CommandLaunchError{Reason: model.LaunchPermissionDenied}).ExitCode(),
+			126,
+		)
+		gt.Equal(t,
+			(&model.CommandLaunchError{Reason: model.LaunchOther}).ExitCode(),
+			1,
+		)
+	})
+
+	t.Run("can be extracted via errors.As through a wrapper", func(t *testing.T) {
+		inner := &model.CommandLaunchError{Command: []string{"foo"}, Reason: model.LaunchNotFound}
+		wrapped := &model.ResolveError{Op: model.OpExecCommand, Cause: inner}
+		var got *model.CommandLaunchError
+		gt.True(t, errors.As(wrapped, &got))
+		gt.Equal(t, got.Reason, model.LaunchNotFound)
+	})
+
+	t.Run("falls back to generic name when command vector is empty", func(t *testing.T) {
+		err := &model.CommandLaunchError{Reason: model.LaunchNotFound}
+		gt.S(t, err.Error()).
+			Contains(`"command"`).
+			NotContains(`""`)
+	})
+
+	t.Run("falls back to generic name when first element is empty string", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"", "arg"},
+			Reason:  model.LaunchPermissionDenied,
+		}
+		gt.S(t, err.Error()).
+			Contains(`"command"`).
+			NotContains(`""`)
+	})
+}
+
 func TestTruncateStderr(t *testing.T) {
 	t.Run("keeps short input intact", func(t *testing.T) {
 		gt.Equal(t, model.TruncateStderr("hello", 100), "hello")

@@ -2,7 +2,9 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"syscall"
@@ -56,19 +58,49 @@ func NewDefaultExecutor() ExecuteFunc {
 			_ = stderrRedactor.Flush()
 		}
 		if err != nil {
-			// Extract exit code
-			if exitError, ok := err.(*exec.ExitError); ok {
+			// Case 1: the child actually ran and exited non-zero. Its stderr
+			// is already on the user's terminal, so we wrap it as an
+			// ExecutorError and stay silent at the cli layer.
+			var exitError *exec.ExitError
+			if errors.As(err, &exitError) {
+				exitCode := 1
 				if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-					exitCode := status.ExitStatus()
-					logger.Debug("command exited with non-zero code", "cmd", cmd, "exit_code", exitCode)
-					return model.NewExecutorError(err, exitCode)
+					exitCode = status.ExitStatus()
 				}
+				logger.Debug("command exited with non-zero code", "cmd", cmd, "exit_code", exitCode)
+				return model.NewExecutorError(err, exitCode)
 			}
-			logger.Debug("failed to execute command", "cmd", cmd, "error", err)
-			return model.NewExecutorError(err, 1)
+
+			// Case 2: the child never ran. Classify why so the cli layer can
+			// emit a helpful error message (the child has produced no stderr
+			// of its own).
+			logger.Debug("failed to launch command", "cmd", cmd, "error", err)
+			return classifyLaunchError(cmd, args, err)
 		}
 
 		logger.Debug("command executed successfully", "cmd", cmd)
 		return nil
+	}
+}
+
+// classifyLaunchError converts an os/exec failure that occurred BEFORE the
+// child started into a typed CommandLaunchError so the cli layer can render
+// it. The classification looks at the error chain rather than parsing the
+// message string.
+func classifyLaunchError(cmd string, args []string, err error) error {
+	command := append([]string{cmd}, args...)
+
+	reason := model.LaunchOther
+	switch {
+	case errors.Is(err, exec.ErrNotFound), errors.Is(err, fs.ErrNotExist):
+		reason = model.LaunchNotFound
+	case errors.Is(err, fs.ErrPermission), errors.Is(err, syscall.ENOEXEC):
+		reason = model.LaunchPermissionDenied
+	}
+
+	return &model.CommandLaunchError{
+		Command: command,
+		Reason:  reason,
+		Cause:   err,
 	}
 }

@@ -253,6 +253,81 @@ func (e *CommandExecError) Error() string {
 
 func (e *CommandExecError) Unwrap() error { return e.Cause }
 
+// LaunchReason classifies why the target command (the one zenv was asked to
+// run) could not be launched.
+type LaunchReason int
+
+const (
+	// LaunchNotFound indicates the executable was not found in PATH.
+	LaunchNotFound LaunchReason = iota
+	// LaunchPermissionDenied indicates the executable was found but cannot be
+	// executed (e.g. missing executable bit, not a regular file).
+	LaunchPermissionDenied
+	// LaunchOther covers any other startup failure that prevented the child
+	// process from ever running.
+	LaunchOther
+)
+
+func (r LaunchReason) String() string {
+	switch r {
+	case LaunchNotFound:
+		return "not found"
+	case LaunchPermissionDenied:
+		return "permission denied"
+	case LaunchOther:
+		return "launch failed"
+	default:
+		return "unknown"
+	}
+}
+
+// CommandLaunchError describes a failure to start the target command that
+// zenv was asked to run. Because the child process never executed, its stderr
+// did not appear and zenv itself is responsible for reporting the failure.
+type CommandLaunchError struct {
+	// Command is the full command vector including arguments. The executable
+	// name is Command[0].
+	Command []string
+	Reason  LaunchReason
+	Cause   error
+}
+
+func (e *CommandLaunchError) Error() string {
+	// Fall back to a generic word so the message stays descriptive even when
+	// the command vector is empty or its first element is an empty string.
+	name := "command"
+	if len(e.Command) > 0 && e.Command[0] != "" {
+		name = e.Command[0]
+	}
+	switch e.Reason {
+	case LaunchNotFound:
+		return fmt.Sprintf("command %q not found in PATH", name)
+	case LaunchPermissionDenied:
+		return fmt.Sprintf("command %q is not executable", name)
+	default:
+		if e.Cause != nil {
+			return fmt.Sprintf("command %q failed to launch: %v", name, e.Cause)
+		}
+		return fmt.Sprintf("command %q failed to launch", name)
+	}
+}
+
+func (e *CommandLaunchError) Unwrap() error { return e.Cause }
+
+// ExitCode returns the exit code that zenv should propagate when the target
+// command failed to launch. Values follow the POSIX shell convention used by
+// bash: 127 for not-found, 126 for permission/exec failures, 1 otherwise.
+func (e *CommandLaunchError) ExitCode() int {
+	switch e.Reason {
+	case LaunchNotFound:
+		return 127
+	case LaunchPermissionDenied:
+		return 126
+	default:
+		return 1
+	}
+}
+
 // TruncateStderr returns the trailing portion of s, never exceeding limit
 // bytes. The result is what should be stored in CommandExecError.Stderr.
 func TruncateStderr(s string, limit int) string {

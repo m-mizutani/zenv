@@ -185,6 +185,101 @@ func TestFormatError_Snapshot(t *testing.T) {
 	t.Log("\n--- verbose / no color ---\n" + cli.FormatError(varErr, true, false))
 }
 
+func TestFormatError_CommandLaunchError(t *testing.T) {
+	t.Run("not found surfaces summary, cause and hint", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"nonexistent", "--flag"},
+			Reason:  model.LaunchNotFound,
+			Cause:   errors.New(`exec: "nonexistent": executable file not found in $PATH`),
+		}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).
+			Contains(`Command "nonexistent" not found in PATH`).
+			Contains(`executable file not found`).
+			Contains("Hint:").
+			Contains("PATH").
+			NotContains("\x1b[")
+	})
+
+	t.Run("permission denied surfaces dedicated hint", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"/tmp/foo"},
+			Reason:  model.LaunchPermissionDenied,
+			Cause:   errors.New("permission denied"),
+		}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).
+			Contains(`Command "/tmp/foo" is not executable`).
+			Contains("permission denied").
+			Contains("chmod +x")
+	})
+
+	t.Run("other reason falls back to generic hint", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"foo"},
+			Reason:  model.LaunchOther,
+			Cause:   errors.New("some other oddity"),
+		}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).
+			Contains(`Command "foo" failed to launch`).
+			Contains("some other oddity").
+			Contains("Hint:")
+	})
+
+	t.Run("no extra Cause line when cause is nil", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"foo"},
+			Reason:  model.LaunchNotFound,
+		}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).
+			Contains(`Command "foo" not found`).
+			NotContains("Cause:")
+	})
+
+	t.Run("renders generic name for empty command vector", func(t *testing.T) {
+		err := &model.CommandLaunchError{Reason: model.LaunchNotFound}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).
+			Contains(`Command "command" not found`).
+			NotContains(`Command ""`)
+	})
+
+	t.Run("renders generic name when first element is empty string", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{""},
+			Reason:  model.LaunchPermissionDenied,
+		}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).
+			Contains(`Command "command" is not executable`).
+			NotContains(`Command ""`)
+	})
+}
+
+// Snapshot the launch-error rendering so the formatting can be inspected via
+// `go test -run TestFormatError_LaunchSnapshot -v`.
+func TestFormatError_LaunchSnapshot(t *testing.T) {
+	t.Run("not found", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"nonexistent", "--flag"},
+			Reason:  model.LaunchNotFound,
+			Cause:   errors.New(`exec: "nonexistent": executable file not found in $PATH`),
+		}
+		t.Log("\n" + cli.FormatError(err, false, false))
+	})
+
+	t.Run("permission denied", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"/tmp/foo"},
+			Reason:  model.LaunchPermissionDenied,
+			Cause:   errors.New("fork/exec /tmp/foo: permission denied"),
+		}
+		t.Log("\n" + cli.FormatError(err, false, false))
+	})
+}
+
 func TestFormatError_TerseDoesNotLeakInternalWrapChain(t *testing.T) {
 	// Reproduce the historical "failed to load: failed to resolve: failed to
 	// build: failed to resolve reference: failed to execute command" leak.
