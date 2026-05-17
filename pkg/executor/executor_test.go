@@ -2,8 +2,11 @@ package executor_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/m-mizutani/gt"
@@ -61,10 +64,43 @@ func TestDefaultExecutor(t *testing.T) {
 		execFunc := executor.NewDefaultExecutor()
 		envVars := []*model.EnvVar{}
 
-		err := execFunc(context.Background(), "nonexistentcommand123", []string{}, envVars)
+		err := execFunc(context.Background(), "nonexistentcommand123", []string{"a", "b"}, envVars)
 		gt.Error(t, err)
-		gt.Equal(t, model.GetExitCode(err), 1)
-		gt.True(t, model.IsExecutorError(err))
+
+		// The child never ran, so this must NOT be classified as an
+		// ExecutorError (which means "child ran and exited non-zero").
+		gt.False(t, model.IsExecutorError(err))
+
+		var launchErr *model.CommandLaunchError
+		gt.True(t, errors.As(err, &launchErr))
+		gt.Equal(t, launchErr.Reason, model.LaunchNotFound)
+		gt.Equal(t, launchErr.Command, []string{"nonexistentcommand123", "a", "b"})
+
+		// POSIX shell convention: command not found -> 127.
+		gt.Equal(t, model.GetExitCode(err), 127)
+	})
+
+	t.Run("Handle non-executable file as command", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("permission bits do not apply on windows")
+		}
+
+		dir := t.TempDir()
+		path := filepath.Join(dir, "not-executable")
+		gt.NoError(t, os.WriteFile(path, []byte("hello\n"), 0o644))
+
+		execFunc := executor.NewDefaultExecutor()
+		err := execFunc(context.Background(), path, []string{}, nil)
+		gt.Error(t, err)
+
+		gt.False(t, model.IsExecutorError(err))
+
+		var launchErr *model.CommandLaunchError
+		gt.True(t, errors.As(err, &launchErr))
+		gt.Equal(t, launchErr.Reason, model.LaunchPermissionDenied)
+
+		// POSIX shell convention: cannot execute -> 126.
+		gt.Equal(t, model.GetExitCode(err), 126)
 	})
 
 	t.Run("Execute command with empty arguments", func(t *testing.T) {

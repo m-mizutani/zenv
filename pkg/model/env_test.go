@@ -66,4 +66,37 @@ func TestGetExitCode(t *testing.T) {
 		err := errors.New("generic error")
 		gt.Equal(t, model.GetExitCode(err), 1)
 	})
+
+	t.Run("returns 127 for CommandLaunchError with LaunchNotFound", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"foo"},
+			Reason:  model.LaunchNotFound,
+		}
+		gt.Equal(t, model.GetExitCode(err), 127)
+	})
+
+	t.Run("returns 126 for CommandLaunchError with LaunchPermissionDenied", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"foo"},
+			Reason:  model.LaunchPermissionDenied,
+		}
+		gt.Equal(t, model.GetExitCode(err), 126)
+	})
+
+	t.Run("returns 1 for CommandLaunchError with LaunchOther", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"foo"},
+			Reason:  model.LaunchOther,
+		}
+		gt.Equal(t, model.GetExitCode(err), 1)
+	})
+
+	t.Run("returns exit code through wrapped CommandLaunchError", func(t *testing.T) {
+		launchErr := &model.CommandLaunchError{
+			Command: []string{"foo"},
+			Reason:  model.LaunchNotFound,
+		}
+		wrapped := fmt.Errorf("outer: %w", launchErr)
+		gt.Equal(t, model.GetExitCode(wrapped), 127)
+	})
 }

@@ -22,9 +22,14 @@ const (
 	SourceHCL
 )
 
-// ExecutorError represents an error from command execution.
-// When the executed command exits with a non-zero code, its stderr output
-// is already visible to the user, so zenv should not print additional messages.
+// ExecutorError represents the case where the target command was successfully
+// launched but exited with a non-zero status code. The child process's stderr
+// has already been streamed to the user, so zenv must NOT print an additional
+// error block on top.
+//
+// Failures that prevent the child from ever running (executable not found,
+// permission denied, ...) are represented by CommandLaunchError instead, and
+// zenv is responsible for emitting a human-readable message in that case.
 type ExecutorError struct {
 	err      error
 	exitCode int
@@ -63,6 +68,11 @@ func GetExitCode(err error) int {
 	var execErr *ExecutorError
 	if errors.As(err, &execErr) {
 		return execErr.ExitCode()
+	}
+
+	var launchErr *CommandLaunchError
+	if errors.As(err, &launchErr) {
+		return launchErr.ExitCode()
 	}
 
 	return 1 // Default exit code for errors
