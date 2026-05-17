@@ -173,6 +173,23 @@ func TestCommandLaunchError(t *testing.T) {
 		gt.True(t, errors.As(wrapped, &got))
 		gt.Equal(t, got.Reason, model.LaunchNotFound)
 	})
+
+	t.Run("falls back to generic name when command vector is empty", func(t *testing.T) {
+		err := &model.CommandLaunchError{Reason: model.LaunchNotFound}
+		gt.S(t, err.Error()).
+			Contains(`"command"`).
+			NotContains(`""`)
+	})
+
+	t.Run("falls back to generic name when first element is empty string", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{"", "arg"},
+			Reason:  model.LaunchPermissionDenied,
+		}
+		gt.S(t, err.Error()).
+			Contains(`"command"`).
+			NotContains(`""`)
+	})
 }
 
 func TestTruncateStderr(t *testing.T) {

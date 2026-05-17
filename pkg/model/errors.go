@@ -293,8 +293,10 @@ type CommandLaunchError struct {
 }
 
 func (e *CommandLaunchError) Error() string {
-	name := ""
-	if len(e.Command) > 0 {
+	// Fall back to a generic word so the message stays descriptive even when
+	// the command vector is empty or its first element is an empty string.
+	name := "command"
+	if len(e.Command) > 0 && e.Command[0] != "" {
 		name = e.Command[0]
 	}
 	switch e.Reason {

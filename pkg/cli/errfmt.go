@@ -108,12 +108,14 @@ func topSummary(err error) string {
 	return err.Error()
 }
 
-// launchName returns the executable name component for display.
+// launchName returns the executable name component for display. It falls back
+// to a generic word when the command vector is empty or its first element is
+// an empty string, so the rendered message does not contain an empty `""`.
 func launchName(le *model.CommandLaunchError) string {
-	if len(le.Command) > 0 {
+	if len(le.Command) > 0 && le.Command[0] != "" {
 		return le.Command[0]
 	}
-	return ""
+	return "command"
 }
 
 // formatErrorBody walks the cause chain and writes the indented "Source" /

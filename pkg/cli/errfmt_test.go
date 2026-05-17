@@ -237,6 +237,25 @@ func TestFormatError_CommandLaunchError(t *testing.T) {
 			Contains(`Command "foo" not found`).
 			NotContains("Cause:")
 	})
+
+	t.Run("renders generic name for empty command vector", func(t *testing.T) {
+		err := &model.CommandLaunchError{Reason: model.LaunchNotFound}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).
+			Contains(`Command "command" not found`).
+			NotContains(`Command ""`)
+	})
+
+	t.Run("renders generic name when first element is empty string", func(t *testing.T) {
+		err := &model.CommandLaunchError{
+			Command: []string{""},
+			Reason:  model.LaunchPermissionDenied,
+		}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).
+			Contains(`Command "command" is not executable`).
+			NotContains(`Command ""`)
+	})
 }
 
 // Snapshot the launch-error rendering so the formatting can be inspected via
