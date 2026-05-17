@@ -60,6 +60,7 @@ zenv [OPTIONS] [ENVIRONMENT_VARIABLES] [COMMAND] [ARGS...]
 - `-e, --env FILE`: Load environment variables from .env file (can be specified multiple times)
 - `-c, --config FILE`: Load environment variables from YAML file (can be specified multiple times)
 - `-p, --profile NAME`: Select profile from YAML configuration (e.g., dev, staging, prod)
+- `--redact`: Mask `secret: true` values in the child process's stdout/stderr. Also enabled by setting `ZENV_REDACT=1`. Disabled by default — see [Secret Redaction](#secret-redaction).
 
 ## Basic Usage
 
@@ -261,7 +262,7 @@ zenv -c config.yaml --profile staging deploy
 ```
 
 #### Secret Redaction
-Add `secret: true` to redact the variable's value. In the variable list it is masked with `*`, and in command stdout/stderr it is replaced with `*****`:
+Add `secret: true` to mark a variable as sensitive. In the variable list (`zenv` with no command) it is always masked with `*`:
 ```yaml
 DB_PASSWORD:
   file: "/path/to/db_secret"
@@ -269,6 +270,27 @@ DB_PASSWORD:
 ```
 
 Profile values inherit `secret: true` from their base configuration.
+
+##### Redacting secrets in the child process's output
+
+By default, `zenv` attaches the child process's `stdin`/`stdout`/`stderr` directly to the parent terminal so that the child sees a real TTY (preserving color, progress bars, interactive prompts, terminal size, etc.). In this mode the child's output is **not** filtered, so a leaked secret value would appear verbatim.
+
+Pass `--redact` (or set `ZENV_REDACT=1`) to opt into output redaction. Any occurrence of a `secret: true` value in the child's stdout/stderr is replaced with `*****`:
+
+```sh
+$ zenv --redact -c .env.yaml my-app
+# any prints of $DB_PASSWORD inside my-app appear as ***** in your terminal
+```
+
+How `--redact` connects the child's streams:
+
+| Platform | Parent stdout is a TTY | Path                                                                        |
+| -------- | ---------------------- | --------------------------------------------------------------------------- |
+| Unix     | yes                    | pseudo-terminal (pty) + redactor — child still sees a TTY                  |
+| Unix     | no (e.g. `> file`)     | anonymous pipe + redactor — child sees a pipe (color libraries usually off) |
+| Windows  | any                    | anonymous pipe + redactor (pty path is not supported)                       |
+
+In the pty path the child's stdout/stderr share a single pty, so any ANSI control sequences will reach a redirected file (`zenv --redact app > out.log`) unless the child itself disables them (e.g. `NO_COLOR=1`).
 
 ## Configuration Rules
 

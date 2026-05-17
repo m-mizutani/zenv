@@ -375,6 +375,28 @@ FROM_HCL:
 	})
 }
 
+func TestIsTruthyEnv(t *testing.T) {
+	cases := map[string]bool{
+		"":      false,
+		"0":     false,
+		"false": false,
+		"no":    false,
+		"off":   false,
+		"1":     true,
+		"true":  true,
+		"TRUE":  true,
+		"True":  true,
+		"yes":   true,
+		"on":    true,
+		" 1 ":   true,
+		"foo":   false,
+	}
+	for input, want := range cases {
+		got := cli.IsTruthyEnvForTest(input)
+		gt.Equal(t, got, want)
+	}
+}
+
 func TestParseLogLevel(t *testing.T) {
 	t.Run("known values map to slog levels", func(t *testing.T) {
 		cases := map[string]slog.Level{

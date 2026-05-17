@@ -29,7 +29,7 @@ func testShowEnvVarsOutput(t *testing.T, envs []*model.EnvVar) string {
 	mockLoader := func(ctx context.Context) ([]*model.EnvVar, error) {
 		return envs, nil
 	}
-	uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, executor.NewDefaultExecutor())
+	uc := usecase.NewUseCase([]loader.LoadFunc{mockLoader}, executor.NewDefaultExecutor(executor.Options{}))
 
 	runErr := uc.Run(context.Background(), []string{})
 	gt.NoError(t, runErr)
@@ -201,7 +201,7 @@ func TestUseCase(t *testing.T) {
 			return nil, os.ErrNotExist
 		}
 
-		uc := usecase.NewUseCase([]loader.LoadFunc{errorLoader}, executor.NewDefaultExecutor())
+		uc := usecase.NewUseCase([]loader.LoadFunc{errorLoader}, executor.NewDefaultExecutor(executor.Options{}))
 
 		err := uc.Run(context.Background(), []string{"echo", "test"})
 
