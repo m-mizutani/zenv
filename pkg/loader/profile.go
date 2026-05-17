@@ -14,26 +14,31 @@ import (
 // a user-supplied --profile flag actually maps to something.
 //
 // Behavior:
-//   - If the file does not exist, an empty set is returned with a nil error.
-//     The caller treats this as "this file contributed no profile names" and
-//     decides separately whether the overall preflight should fail.
+//   - When mustExist is true, a missing file is reported as
+//     *model.ConfigFileError (Reason = ReasonNotFound). Callers pass true for
+//     paths that came from an explicit --config flag so the profile preflight
+//     surfaces the file-absence error rather than masking it as
+//     "profile not found".
+//   - When mustExist is false, a missing file returns (nil, nil). The caller
+//     uses the nil result to learn that this path contributed nothing — both
+//     to the profile-name union and to the "searched paths" list shown in
+//     ProfileNotFoundError.
 //   - If the file exists but cannot be parsed or is schema-invalid, the
 //     underlying loader error is returned as-is (typically
 //     *model.ConfigFileError) so the user sees the same diagnostics as during
 //     the normal load.
 //   - Unknown extensions are routed to the YAML reader, matching the loader
 //     dispatcher in pkg/cli.
-func CollectProfileNames(ctx context.Context, path string) (map[string]struct{}, error) {
-	names := make(map[string]struct{})
-
-	cfg, err := loadConfigForProfileScan(ctx, path)
+func CollectProfileNames(ctx context.Context, path string, mustExist bool) (map[string]struct{}, error) {
+	cfg, err := loadConfigForProfileScan(ctx, path, mustExist)
 	if err != nil {
 		return nil, err
 	}
 	if cfg == nil {
-		return names, nil
+		return nil, nil
 	}
 
+	names := make(map[string]struct{})
 	for _, value := range cfg {
 		for profileName := range value.Profile {
 			names[profileName] = struct{}{}
@@ -43,12 +48,12 @@ func CollectProfileNames(ctx context.Context, path string) (map[string]struct{},
 }
 
 // loadConfigForProfileScan loads a YAMLConfig from disk without resolving any
-// variables. The configuration is only used to enumerate profile names.
-// mustExist is false: callers want a profile preflight to silently skip
-// missing files, not to double-report file-absence errors.
-func loadConfigForProfileScan(ctx context.Context, path string) (model.YAMLConfig, error) {
+// variables. The configuration is only used to enumerate profile names. The
+// mustExist flag is forwarded to the underlying loader so that explicit
+// --config paths fail loudly when the file is missing.
+func loadConfigForProfileScan(ctx context.Context, path string, mustExist bool) (model.YAMLConfig, error) {
 	if strings.EqualFold(filepath.Ext(path), ".hcl") {
-		return loadHCLFile(ctx, path, false)
+		return loadHCLFile(ctx, path, mustExist)
 	}
-	return loadAndMergeYAMLFiles(ctx, path, false)
+	return loadAndMergeYAMLFiles(ctx, path, mustExist)
 }

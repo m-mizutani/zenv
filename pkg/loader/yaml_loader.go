@@ -175,11 +175,13 @@ func loadAndMergeYAMLFiles(ctx context.Context, path string, mustExist bool) (mo
 	}
 
 	// If neither file exists, either error (when the caller insisted the file
-	// must exist) or stay silent (default-discovery mode).
+	// must exist) or stay silent (default-discovery mode). The reported Path
+	// is the original user-supplied path so the error message matches what
+	// the user actually typed (e.g. "config.yml" instead of "config.yaml").
 	if !found1 && !found2 {
 		if mustExist {
 			return nil, &model.ConfigFileError{
-				Path:   yamlPath,
+				Path:   path,
 				Format: model.FormatYAML,
 				Reason: model.ReasonNotFound,
 			}

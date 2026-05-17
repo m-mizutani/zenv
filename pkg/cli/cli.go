@@ -25,13 +25,25 @@ import (
 // at least one of the supplied configuration files. The check is silent when
 // the profile is found; otherwise it returns a *model.ProfileNotFoundError
 // describing what was searched and which alternatives exist.
-func checkProfileExists(ctx context.Context, profile string, paths []string) error {
+//
+// When mustExist is true (caller passed --config explicitly), a missing file
+// surfaces as the underlying *model.ConfigFileError so the user sees a
+// targeted "missing file" error rather than the indirect "profile not found".
+// Only paths that actually contributed configuration are recorded in
+// ProfileNotFoundError.Paths, which lets the hint system distinguish
+// "configuration loaded but profile not defined" from "nothing was loaded".
+func checkProfileExists(ctx context.Context, profile string, paths []string, mustExist bool) error {
 	combined := make(map[string]struct{})
+	var foundPaths []string
 	for _, p := range paths {
-		names, err := loader.CollectProfileNames(ctx, p)
+		names, err := loader.CollectProfileNames(ctx, p, mustExist)
 		if err != nil {
 			return err
 		}
+		if names == nil {
+			continue
+		}
+		foundPaths = append(foundPaths, p)
 		for name := range names {
 			combined[name] = struct{}{}
 		}
@@ -49,7 +61,7 @@ func checkProfileExists(ctx context.Context, profile string, paths []string) err
 	return &model.ProfileNotFoundError{
 		Profile:   profile,
 		Available: available,
-		Paths:     append([]string{}, paths...),
+		Paths:     foundPaths,
 	}
 }
 
@@ -243,7 +255,7 @@ func Run(ctx context.Context, args []string) error {
 	// this before running any loader so the user doesn't see partial work
 	// (e.g. a successful command resolution) for an obviously wrong flag.
 	if profile != "" {
-		if err := checkProfileExists(ctx, profile, configPaths); err != nil {
+		if err := checkProfileExists(ctx, profile, configPaths, configExplicit); err != nil {
 			return err
 		}
 	}
