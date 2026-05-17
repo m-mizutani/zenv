@@ -280,6 +280,53 @@ func TestFormatError_LaunchSnapshot(t *testing.T) {
 	})
 }
 
+func TestFormatError_ConfigFileNotFound(t *testing.T) {
+	err := &model.ConfigFileError{
+		Path:   "/etc/missing.yaml",
+		Format: model.FormatYAML,
+		Reason: model.ReasonNotFound,
+	}
+	got := cli.FormatError(err, false, false)
+	gt.S(t, got).
+		Contains("Missing yaml config file").
+		Contains("/etc/missing.yaml").
+		Contains("Hint:")
+}
+
+func TestFormatError_ProfileNotFound(t *testing.T) {
+	t.Run("with available alternatives", func(t *testing.T) {
+		err := &model.ProfileNotFoundError{
+			Profile:   "prod",
+			Available: []string{"dev", "staging"},
+			Paths:     []string{".env.yaml"},
+		}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).
+			Contains(`Profile "prod" is not defined`).
+			Contains(".env.yaml").
+			Contains("dev, staging")
+	})
+
+	t.Run("with no configuration loaded", func(t *testing.T) {
+		err := &model.ProfileNotFoundError{Profile: "prod"}
+		got := cli.FormatError(err, false, false)
+		gt.S(t, got).
+			Contains(`Profile "prod" is not defined`).
+			Contains("no configuration file was loaded")
+	})
+}
+
+func TestFormatError_InvalidLogLevel(t *testing.T) {
+	err := &model.InvalidLogLevelError{
+		Value:   "foo",
+		Allowed: []string{"debug", "info", "warn", "error"},
+	}
+	got := cli.FormatError(err, false, false)
+	gt.S(t, got).
+		Contains(`Invalid log level "foo"`).
+		Contains("debug, info, warn, error")
+}
+
 func TestFormatError_TerseDoesNotLeakInternalWrapChain(t *testing.T) {
 	// Reproduce the historical "failed to load: failed to resolve: failed to
 	// build: failed to resolve reference: failed to execute command" leak.

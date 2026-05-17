@@ -32,6 +32,77 @@ func TestConfigFileError(t *testing.T) {
 	})
 }
 
+func TestConfigFileError_NotFound(t *testing.T) {
+	t.Run("reports missing file with path", func(t *testing.T) {
+		err := &model.ConfigFileError{
+			Path:   "missing.yaml",
+			Format: model.FormatYAML,
+			Reason: model.ReasonNotFound,
+		}
+		gt.S(t, err.Error()).
+			Contains("missing").
+			Contains("yaml").
+			Contains("missing.yaml")
+	})
+
+	t.Run("reason String", func(t *testing.T) {
+		gt.Equal(t, model.ReasonNotFound.String(), "not found")
+	})
+}
+
+func TestProfileNotFoundError(t *testing.T) {
+	t.Run("with available profiles", func(t *testing.T) {
+		err := &model.ProfileNotFoundError{
+			Profile:   "prod",
+			Available: []string{"dev", "staging"},
+			Paths:     []string{".env.yaml"},
+		}
+		gt.S(t, err.Error()).
+			Contains(`"prod"`).
+			Contains("not found").
+			Contains("dev, staging")
+	})
+
+	t.Run("with no profiles defined anywhere", func(t *testing.T) {
+		err := &model.ProfileNotFoundError{
+			Profile: "prod",
+			Paths:   []string{".env.yaml"},
+		}
+		gt.S(t, err.Error()).
+			Contains(`"prod"`).
+			Contains("no profiles defined")
+	})
+
+	t.Run("with no configuration file loaded", func(t *testing.T) {
+		err := &model.ProfileNotFoundError{Profile: "prod"}
+		gt.S(t, err.Error()).
+			Contains(`"prod"`).
+			Contains("no configuration file")
+	})
+}
+
+func TestInvalidLogLevelError(t *testing.T) {
+	t.Run("includes allowed list", func(t *testing.T) {
+		err := &model.InvalidLogLevelError{
+			Value:   "foo",
+			Allowed: []string{"debug", "info", "warn", "error"},
+		}
+		gt.S(t, err.Error()).
+			Contains(`"foo"`).
+			Contains("debug").
+			Contains("info").
+			Contains("warn").
+			Contains("error")
+	})
+
+	t.Run("without allowed list", func(t *testing.T) {
+		err := &model.InvalidLogLevelError{Value: "foo"}
+		gt.S(t, err.Error()).
+			Contains(`"foo"`).
+			Contains("invalid log level")
+	})
+}
+
 func TestVariableError(t *testing.T) {
 	t.Run("carries key in message", func(t *testing.T) {
 		err := &model.VariableError{

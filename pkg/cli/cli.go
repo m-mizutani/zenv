@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/m-mizutani/clog"
@@ -20,13 +21,59 @@ import (
 	"golang.org/x/term"
 )
 
+// checkProfileExists verifies that the requested profile name is defined in
+// at least one of the supplied configuration files. The check is silent when
+// the profile is found; otherwise it returns a *model.ProfileNotFoundError
+// describing what was searched and which alternatives exist.
+//
+// When mustExist is true (caller passed --config explicitly), a missing file
+// surfaces as the underlying *model.ConfigFileError so the user sees a
+// targeted "missing file" error rather than the indirect "profile not found".
+// Only paths that actually contributed configuration are recorded in
+// ProfileNotFoundError.Paths, which lets the hint system distinguish
+// "configuration loaded but profile not defined" from "nothing was loaded".
+func checkProfileExists(ctx context.Context, profile string, paths []string, mustExist bool) error {
+	combined := make(map[string]struct{})
+	var foundPaths []string
+	for _, p := range paths {
+		names, err := loader.CollectProfileNames(ctx, p, mustExist)
+		if err != nil {
+			return err
+		}
+		if names == nil {
+			continue
+		}
+		foundPaths = append(foundPaths, p)
+		for name := range names {
+			combined[name] = struct{}{}
+		}
+	}
+	if _, ok := combined[profile]; ok {
+		return nil
+	}
+
+	available := make([]string, 0, len(combined))
+	for name := range combined {
+		available = append(available, name)
+	}
+	sort.Strings(available)
+
+	return &model.ProfileNotFoundError{
+		Profile:   profile,
+		Available: available,
+		Paths:     foundPaths,
+	}
+}
+
 // newConfigLoader picks the appropriate loader based on the file extension.
 // Files ending in .hcl use the HCL loader; everything else falls back to YAML.
-func newConfigLoader(path, profile string, existingVars []*model.EnvVar) loader.LoadFunc {
+// mustExist=true is set when the path comes from an explicit --config flag, so
+// the loader fails fast on a missing file; default-discovery paths pass false.
+func newConfigLoader(path, profile string, mustExist bool, existingVars []*model.EnvVar) loader.LoadFunc {
 	if strings.EqualFold(filepath.Ext(path), ".hcl") {
-		return loader.NewHCLLoaderWithProfile(path, profile, existingVars)
+		return loader.NewHCLLoaderWithProfile(path, profile, mustExist, existingVars)
 	}
-	return loader.NewYAMLLoaderWithProfile(path, profile, existingVars)
+	return loader.NewYAMLLoaderWithProfile(path, profile, mustExist, existingVars)
 }
 
 // Format represents the log output format
@@ -79,19 +126,32 @@ func NewLoggerWithFormat(level slog.Level, w io.Writer, format Format) *slog.Log
 	return slog.New(handler)
 }
 
-// ParseLogLevel parses a string log level to slog.Level
-func ParseLogLevel(level string) slog.Level {
+// allowedLogLevels lists the user-facing log level names accepted by
+// ParseLogLevel. Kept here so the error message and the parser stay in sync.
+var allowedLogLevels = []string{"debug", "info", "warn", "error"}
+
+// ParseLogLevel parses a string log level to slog.Level.
+//
+// Unknown values (including the empty string) are reported as
+// model.InvalidLogLevelError so the caller can surface a precise error to the
+// user instead of silently falling back to a default. The CLI parser supplies
+// "warn" as the default when --log-level is omitted, so empty input here means
+// the user explicitly passed an empty value, which is also invalid.
+func ParseLogLevel(level string) (slog.Level, error) {
 	switch level {
 	case "debug", "DEBUG":
-		return slog.LevelDebug
-	case "info", "INFO", "":
-		return slog.LevelInfo
+		return slog.LevelDebug, nil
+	case "info", "INFO":
+		return slog.LevelInfo, nil
 	case "warn", "warning", "WARN", "WARNING":
-		return slog.LevelWarn
+		return slog.LevelWarn, nil
 	case "error", "ERROR":
-		return slog.LevelError
+		return slog.LevelError, nil
 	default:
-		return slog.LevelWarn // Default to warn as specified
+		return 0, &model.InvalidLogLevelError{
+			Value:   level,
+			Allowed: allowedLogLevels,
+		}
 	}
 }
 
@@ -163,12 +223,42 @@ func Run(ctx context.Context, args []string) error {
 	enableTemplate := result.Options["template"].IsSet()
 	commandArgs := result.Args
 
-	// Create logger based on log-level flag
-	level := ParseLogLevel(logLevel)
+	// Create logger based on log-level flag. An invalid level is reported up
+	// the chain so the user sees the standard FormatError output, just like
+	// every other start-up failure.
+	level, err := ParseLogLevel(logLevel)
+	if err != nil {
+		return err
+	}
 	logger := NewLogger(level, os.Stderr)
 
 	// Set logger in context for propagation
 	ctx = ctxlog.With(ctx, logger)
+
+	// Resolve the configuration paths that should drive both the profile
+	// preflight and the actual loader chain.
+	var configPaths []string
+	configExplicit := len(configFiles) > 0
+	if configExplicit {
+		configPaths = configFiles
+	} else {
+		// Default path resolution: prefer .env.hcl if present (do not merge with YAML).
+		if hclPath := loader.FindDefaultHCLPath(); hclPath != "" {
+			configPaths = []string{hclPath}
+		} else {
+			configPaths = []string{loader.ResolveDefaultYAMLPath()}
+		}
+	}
+
+	// Pre-flight: when --profile is set, ensure the requested profile name is
+	// defined somewhere in the configuration files we are about to load. We do
+	// this before running any loader so the user doesn't see partial work
+	// (e.g. a successful command resolution) for an obviously wrong flag.
+	if profile != "" {
+		if err := checkProfileExists(ctx, profile, configPaths, configExplicit); err != nil {
+			return err
+		}
+	}
 
 	// Collect environment variables in order for YAML loader reference
 	var allExistingVars []*model.EnvVar
@@ -185,13 +275,14 @@ func Run(ctx context.Context, args []string) error {
 		}
 	}
 
-	// Load .env files once and collect their variables
+	// Load .env files once and collect their variables. Explicitly passed
+	// paths (-e/--env) must exist; the default .env probe stays tolerant.
 	var envLoaders []loader.LoadFunc
 	for _, envFile := range envFiles {
-		envLoaders = append(envLoaders, loader.NewDotEnvLoader(envFile))
+		envLoaders = append(envLoaders, loader.NewDotEnvLoader(envFile, true))
 	}
 	if len(envFiles) == 0 {
-		envLoaders = append(envLoaders, loader.NewDotEnvLoader(loader.ResolveDefaultDotEnvPath()))
+		envLoaders = append(envLoaders, loader.NewDotEnvLoader(loader.ResolveDefaultDotEnvPath(), false))
 	}
 
 	// Execute .env loaders once and collect results
@@ -199,7 +290,7 @@ func Run(ctx context.Context, args []string) error {
 	for _, loadFunc := range envLoaders {
 		envVars, err := loadFunc(ctx)
 		if err != nil {
-			return goerr.Wrap(err, "failed to load .env file")
+			return err
 		}
 		if envVars != nil {
 			loadedDotEnvVars = append(loadedDotEnvVars, envVars...)
@@ -207,18 +298,11 @@ func Run(ctx context.Context, args []string) error {
 	}
 	allExistingVars = append(allExistingVars, loadedDotEnvVars...)
 
-	// Now create config loaders (HCL or YAML, picked by extension) with profile and existing vars
+	// Build config loaders for the same paths we used in the preflight.
+	// Explicit --config paths must exist; default-discovery paths stay tolerant.
 	var configLoaders []loader.LoadFunc
-	for _, configFile := range configFiles {
-		configLoaders = append(configLoaders, newConfigLoader(configFile, profile, allExistingVars))
-	}
-	if len(configFiles) == 0 {
-		// Default path resolution: prefer .env.hcl if present (do not merge with YAML).
-		if hclPath := loader.FindDefaultHCLPath(); hclPath != "" {
-			configLoaders = append(configLoaders, loader.NewHCLLoaderWithProfile(hclPath, profile, allExistingVars))
-		} else {
-			configLoaders = append(configLoaders, loader.NewYAMLLoaderWithProfile(loader.ResolveDefaultYAMLPath(), profile, allExistingVars))
-		}
+	for _, configPath := range configPaths {
+		configLoaders = append(configLoaders, newConfigLoader(configPath, profile, configExplicit, allExistingVars))
 	}
 
 	// Combine all loaders for the usecase

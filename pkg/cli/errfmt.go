@@ -103,7 +103,17 @@ func topSummary(err error) string {
 			return fmt.Sprintf("Cannot parse %s config file", cfe.Format)
 		case model.ReasonInvalidSchema:
 			return fmt.Sprintf("Invalid %s configuration", cfe.Format)
+		case model.ReasonNotFound:
+			return fmt.Sprintf("Missing %s config file", cfe.Format)
 		}
+	}
+	var pe *model.ProfileNotFoundError
+	if errors.As(err, &pe) {
+		return fmt.Sprintf("Profile %q is not defined", pe.Profile)
+	}
+	var le2 *model.InvalidLogLevelError
+	if errors.As(err, &le2) {
+		return fmt.Sprintf("Invalid log level %q", le2.Value)
 	}
 	return err.Error()
 }
@@ -180,6 +190,10 @@ func sourceLine(err error, w *errWriter) string {
 			return ""
 		}
 		return w.writeCyan("Source: ") + cfe.Path
+	}
+	var pe *model.ProfileNotFoundError
+	if errors.As(err, &pe) && len(pe.Paths) > 0 {
+		return w.writeCyan("Source: ") + strings.Join(pe.Paths, ", ")
 	}
 	return ""
 }
@@ -328,8 +342,28 @@ func hintFor(err error, w *errWriter) string {
 		return w.writeYellow("Hint:  break the cycle by removing or restructuring one of the references")
 	}
 	var cfe *model.ConfigFileError
-	if errors.As(err, &cfe) && cfe.Reason == model.ReasonParseError {
-		return w.writeYellow("Hint:  fix the syntax error reported above and retry")
+	if errors.As(err, &cfe) {
+		switch cfe.Reason {
+		case model.ReasonParseError:
+			return w.writeYellow("Hint:  fix the syntax error reported above and retry")
+		case model.ReasonNotFound:
+			return w.writeYellow(fmt.Sprintf("Hint:  create the file at %q or remove the flag that points to it", cfe.Path))
+		}
+	}
+	var pe *model.ProfileNotFoundError
+	if errors.As(err, &pe) {
+		switch {
+		case len(pe.Available) > 0:
+			return w.writeYellow("Hint:  pick one of the available profiles: " + strings.Join(pe.Available, ", "))
+		case len(pe.Paths) == 0:
+			return w.writeYellow("Hint:  no configuration file was loaded; create one or omit --profile")
+		default:
+			return w.writeYellow("Hint:  define a profile block in your configuration or omit --profile")
+		}
+	}
+	var ll *model.InvalidLogLevelError
+	if errors.As(err, &ll) && len(ll.Allowed) > 0 {
+		return w.writeYellow("Hint:  use one of " + strings.Join(ll.Allowed, ", "))
 	}
 	return ""
 }

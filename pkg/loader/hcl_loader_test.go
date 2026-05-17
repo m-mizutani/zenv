@@ -2,6 +2,7 @@ package loader_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,10 +12,21 @@ import (
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
+// newHCLLoader / newHCLLoaderWithProfile are mustExist=false wrappers used in
+// existing test cases. Strict (mustExist=true) behavior is covered by
+// dedicated test cases that call the production constructors directly.
+func newHCLLoader(path string, existingVars ...[]*model.EnvVar) loader.LoadFunc {
+	return loader.NewHCLLoader(path, false, existingVars...)
+}
+
+func newHCLLoaderWithProfile(path, profile string, existingVars ...[]*model.EnvVar) loader.LoadFunc {
+	return loader.NewHCLLoaderWithProfile(path, profile, false, existingVars...)
+}
+
 func TestHCLLoaderBasic(t *testing.T) {
 	t.Setenv("ZENV_TEST_HOME", "/home/zenv-test")
 
-	loadFunc := loader.NewHCLLoader("testdata/basic.hcl")
+	loadFunc := newHCLLoader("testdata/basic.hcl")
 	envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 	got := envVarMap(envVars)
@@ -39,7 +51,7 @@ func TestHCLLoaderBasic(t *testing.T) {
 
 func TestHCLLoaderProfile(t *testing.T) {
 	t.Run("default profile (no flag)", func(t *testing.T) {
-		loadFunc := loader.NewHCLLoader("testdata/profile.hcl")
+		loadFunc := newHCLLoader("testdata/profile.hcl")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 		got := envVarMap(envVars)
 
@@ -49,7 +61,7 @@ func TestHCLLoaderProfile(t *testing.T) {
 	})
 
 	t.Run("dev profile (scalar attribute and structured block)", func(t *testing.T) {
-		loadFunc := loader.NewHCLLoaderWithProfile("testdata/profile.hcl", "dev")
+		loadFunc := newHCLLoaderWithProfile("testdata/profile.hcl", "dev")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 		got := envVarMap(envVars)
 
@@ -59,7 +71,7 @@ func TestHCLLoaderProfile(t *testing.T) {
 	})
 
 	t.Run("prod profile unsets DEBUG_MODE via null", func(t *testing.T) {
-		loadFunc := loader.NewHCLLoaderWithProfile("testdata/profile.hcl", "prod")
+		loadFunc := newHCLLoaderWithProfile("testdata/profile.hcl", "prod")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 		got := envVarMap(envVars)
 
@@ -72,7 +84,7 @@ func TestHCLLoaderProfile(t *testing.T) {
 }
 
 func TestHCLLoaderTemplate(t *testing.T) {
-	loadFunc := loader.NewHCLLoader("testdata/template.hcl")
+	loadFunc := newHCLLoader("testdata/template.hcl")
 	envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 	got := envVarMap(envVars)
 
@@ -81,9 +93,21 @@ func TestHCLLoaderTemplate(t *testing.T) {
 }
 
 func TestHCLLoaderNonExistentFile(t *testing.T) {
-	loadFunc := loader.NewHCLLoader("testdata/does_not_exist.hcl")
-	envVars := gt.R1(loadFunc(context.Background())).NoError(t)
-	gt.Nil(t, envVars)
+	t.Run("mustExist=false silently skips", func(t *testing.T) {
+		loadFunc := newHCLLoader("testdata/does_not_exist.hcl")
+		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
+		gt.Nil(t, envVars)
+	})
+
+	t.Run("mustExist=true returns ReasonNotFound", func(t *testing.T) {
+		loadFunc := loader.NewHCLLoader("testdata/does_not_exist.hcl", true)
+		_, err := loadFunc(context.Background())
+		gt.Error(t, err)
+		var cfgErr *model.ConfigFileError
+		gt.True(t, errors.As(err, &cfgErr))
+		gt.Equal(t, cfgErr.Format, model.FormatHCL)
+		gt.Equal(t, cfgErr.Reason, model.ReasonNotFound)
+	})
 }
 
 func TestHCLLoaderSyntaxError(t *testing.T) {
@@ -91,7 +115,7 @@ func TestHCLLoaderSyntaxError(t *testing.T) {
 	path := filepath.Join(tmp, "broken.hcl")
 	gt.NoError(t, os.WriteFile(path, []byte("FOO = \n"), 0600))
 
-	loadFunc := loader.NewHCLLoader(path)
+	loadFunc := newHCLLoader(path)
 	_, err := loadFunc(context.Background())
 	gt.Error(t, err)
 }
@@ -107,7 +131,7 @@ FOO {
 `
 		gt.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
-		loadFunc := loader.NewHCLLoader(path)
+		loadFunc := newHCLLoader(path)
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 	})
@@ -124,7 +148,7 @@ FOO {
 `
 		gt.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
-		loadFunc := loader.NewHCLLoader(path)
+		loadFunc := newHCLLoader(path)
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 	})
@@ -140,7 +164,7 @@ func TestHCLLoaderConflictingValueTypes(t *testing.T) {
 `
 	gt.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
-	loadFunc := loader.NewHCLLoader(path)
+	loadFunc := newHCLLoader(path)
 	_, err := loadFunc(context.Background())
 	gt.Error(t, err)
 }
@@ -155,7 +179,7 @@ func TestHCLLoaderUnknownAttribute(t *testing.T) {
 `
 	gt.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
-	loadFunc := loader.NewHCLLoader(path)
+	loadFunc := newHCLLoader(path)
 	_, err := loadFunc(context.Background())
 	gt.Error(t, err)
 }
@@ -169,7 +193,7 @@ func TestHCLLoaderBlockWithLabelRejected(t *testing.T) {
 `
 	gt.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
-	loadFunc := loader.NewHCLLoader(path)
+	loadFunc := newHCLLoader(path)
 	_, err := loadFunc(context.Background())
 	gt.Error(t, err)
 }
@@ -184,7 +208,7 @@ func TestHCLLoaderInvalidRefs(t *testing.T) {
 `
 	gt.NoError(t, os.WriteFile(path, []byte(content), 0600))
 
-	loadFunc := loader.NewHCLLoader(path)
+	loadFunc := newHCLLoader(path)
 	_, err := loadFunc(context.Background())
 	gt.Error(t, err)
 }
