@@ -2,6 +2,8 @@ package loader
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -50,15 +52,24 @@ func NewHCLLoaderWithProfile(path string, profile string, existingVars ...[]*mod
 			}
 
 			if err := effectiveValue.Validate(); err != nil {
-				logger.Error("invalid HCL configuration", "key", key, "error", err)
-				return nil, goerr.Wrap(err, "invalid configuration", goerr.V("key", key))
+				return nil, &model.ConfigFileError{
+					Path:   path,
+					Format: model.FormatHCL,
+					Reason: model.ReasonInvalidSchema,
+					Detail: fmt.Sprintf("variable %q: %v", key, err),
+					Cause:  err,
+				}
 			}
 
 			logger.Debug("resolving HCL variable", "key", key)
 			resolvedValue, err := resolver.resolveWithValue(key, effectiveValue)
 			if err != nil {
-				logger.Error("failed to resolve HCL variable", "key", key, "error", err)
-				return nil, goerr.Wrap(err, "failed to resolve variable", goerr.V("key", key))
+				return nil, &model.VariableError{
+					Key:     key,
+					Path:    path,
+					Profile: profile,
+					Cause:   err,
+				}
 			}
 
 			envVars = append(envVars, &model.EnvVar{
@@ -81,29 +92,64 @@ func loadHCLFile(ctx context.Context, path string) (model.YAMLConfig, error) {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, goerr.Wrap(err, "failed to check HCL file", goerr.V("path", path))
+		return nil, &model.ConfigFileError{
+			Path:   path,
+			Format: model.FormatHCL,
+			Reason: model.ReasonNotReadable,
+			Cause:  err,
+		}
 	}
 
 	logger.Debug("loading HCL file", "path", path)
 	data, err := os.ReadFile(path) // #nosec G304 - file path is user provided and expected
 	if err != nil {
-		return nil, goerr.Wrap(err, "failed to read HCL file", goerr.V("path", path))
+		return nil, &model.ConfigFileError{
+			Path:   path,
+			Format: model.FormatHCL,
+			Reason: model.ReasonNotReadable,
+			Cause:  err,
+		}
 	}
 
 	parser := hclparse.NewParser()
 	file, diags := parser.ParseHCL(data, path)
 	if diags.HasErrors() {
-		return nil, goerr.New("failed to parse HCL file",
-			goerr.V("path", path),
-			goerr.V("diagnostics", diags.Error()))
+		return nil, &model.ConfigFileError{
+			Path:   path,
+			Format: model.FormatHCL,
+			Reason: model.ReasonParseError,
+			Detail: diags.Error(),
+		}
 	}
 
 	body, ok := file.Body.(*hclsyntax.Body)
 	if !ok {
-		return nil, goerr.New("unexpected HCL body type", goerr.V("path", path))
+		return nil, &model.ConfigFileError{
+			Path:   path,
+			Format: model.FormatHCL,
+			Reason: model.ReasonInvalidSchema,
+			Detail: "unexpected HCL body type",
+		}
 	}
 
-	return parseHCLBody(body)
+	cfg, err := parseHCLBody(body)
+	if err != nil {
+		// parseHCLBody returns goerr-based schema errors; wrap them as
+		// ConfigFileError so the formatter can attach the file path.
+		// Pass through if already typed (even when wrapped).
+		var cfe *model.ConfigFileError
+		if errors.As(err, &cfe) {
+			return nil, err
+		}
+		return nil, &model.ConfigFileError{
+			Path:   path,
+			Format: model.FormatHCL,
+			Reason: model.ReasonInvalidSchema,
+			Detail: err.Error(),
+			Cause:  err,
+		}
+	}
+	return cfg, nil
 }
 
 // parseHCLBody converts the top-level body of an HCL file into a YAMLConfig.

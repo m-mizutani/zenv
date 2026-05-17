@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -239,6 +240,17 @@ func Run(ctx context.Context, args []string) error {
 	}
 
 	if err := uc.Run(ctx, commandArgs); err != nil {
+		// The executor's own non-zero exit already surfaces the child
+		// process's stderr to the user, so we do not double-print our own
+		// error block in that case.
+		if !model.IsExecutorError(err) {
+			verbose := level <= slog.LevelDebug
+			useColor := false
+			if f, ok := any(os.Stderr).(*os.File); ok {
+				useColor = term.IsTerminal(int(f.Fd()))
+			}
+			_, _ = fmt.Fprintln(os.Stderr, FormatError(err, verbose, useColor))
+		}
 		return err
 	}
 	return nil

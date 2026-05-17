@@ -55,7 +55,10 @@ func (uc *UseCase) Run(ctx context.Context, args []string) error {
 	for _, loadFunc := range uc.Loaders {
 		envVars, err := loadFunc(ctx)
 		if err != nil {
-			return goerr.Wrap(err, "failed to load environment variables")
+			// Loaders already return typed errors (ConfigFileError /
+			// VariableError / ...); passing them through preserves the
+			// structure for the CLI's error formatter.
+			return err
 		}
 		allEnvVars = append(allEnvVars, envVars...)
 	}

@@ -2,6 +2,7 @@ package usecase_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -205,7 +206,9 @@ func TestUseCase(t *testing.T) {
 		err := uc.Run(context.Background(), []string{"echo", "test"})
 
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("failed to load environment variables")
+		// usecase passes loader errors through unchanged so the CLI's
+		// errfmt can inspect the typed structure.
+		gt.True(t, errors.Is(err, os.ErrNotExist))
 	})
 
 	t.Run("Parse inline environment variables correctly", func(t *testing.T) {
