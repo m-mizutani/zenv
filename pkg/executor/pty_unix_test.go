@@ -108,6 +108,32 @@ func TestRunWithPty_RedactsSecretEmbeddedInANSI(t *testing.T) {
 	gt.S(t, output).Contains("*****")
 }
 
+func TestSetupRawModeIfTTY_NonTTY(t *testing.T) {
+	// A pipe fd is not a tty. The helper must return a no-op restore
+	// (nil error) so callers can defer it unconditionally without
+	// branching on tty-ness.
+	r, w, err := os.Pipe()
+	gt.NoError(t, err)
+	defer func() { _ = r.Close() }()
+	defer func() { _ = w.Close() }()
+
+	restore, err := executor.SetupRawModeIfTTYForTest(int(r.Fd()))
+	gt.NoError(t, err)
+	gt.NotNil(t, restore)
+
+	// Calling the returned restore must not return an error on the non-tty path.
+	gt.NoError(t, restore())
+}
+
+func TestSetupRawModeIfTTY_InvalidFD(t *testing.T) {
+	// An obviously bogus fd is not a terminal, so the tty check fails
+	// first and the function returns a no-op restore (no MakeRaw attempt).
+	restore, err := executor.SetupRawModeIfTTYForTest(-1)
+	gt.NoError(t, err)
+	gt.NotNil(t, restore)
+	gt.NoError(t, restore())
+}
+
 func TestRunWithPty_PropagatesExitCode(t *testing.T) {
 	if !executor.PtySupportedForTest() {
 		t.Skip("pty not supported on this platform")
