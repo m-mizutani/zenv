@@ -1,0 +1,182 @@
+package cli_test
+
+import (
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/m-mizutani/goerr/v2"
+	"github.com/m-mizutani/gt"
+	"github.com/m-mizutani/zenv/v2/pkg/cli"
+	"github.com/m-mizutani/zenv/v2/pkg/model"
+)
+
+func TestFormatError_Nil(t *testing.T) {
+	gt.Equal(t, cli.FormatError(nil, false, false), "")
+}
+
+func TestFormatError_PlainError(t *testing.T) {
+	got := cli.FormatError(errors.New("boom"), false, false)
+	gt.S(t, got).
+		Contains("Error:").
+		Contains("boom").
+		NotContains("\x1b[")
+}
+
+// The realistic scenario from the spec: a HCL variable BACKSTREAM_HEADER
+// that references GOOGLE_ID_TOKEN, whose value is produced by a failing
+// gcloud command.
+func TestFormatError_RealisticChain(t *testing.T) {
+	cmdErr := &model.CommandExecError{
+		Command:  []string{"gcloud", "auth", "print-identity-token"},
+		ExitCode: 1,
+		Stderr:   "ERROR: (gcloud.auth.print-identity-token) Reauth required",
+		Cause:    errors.New("exit status 1"),
+	}
+	refErr := &model.ReferenceError{
+		Ref:    "GOOGLE_ID_TOKEN",
+		Reason: model.RefResolveFailed,
+		Cause:  cmdErr,
+	}
+	varErr := &model.VariableError{
+		Key:     "BACKSTREAM_HEADER",
+		Path:    ".env.hcl",
+		Profile: "dev",
+		Cause:   refErr,
+	}
+
+	got := cli.FormatError(varErr, false, false)
+
+	// Top line
+	gt.S(t, got).Contains(`Failed to resolve variable "BACKSTREAM_HEADER"`)
+	// Source line with path and profile
+	gt.S(t, got).Contains(".env.hcl").Contains("profile: dev")
+	// Reference and command surfaces
+	gt.S(t, got).Contains(`Reference "GOOGLE_ID_TOKEN" could not be resolved`)
+	gt.S(t, got).Contains("gcloud auth print-identity-token").Contains("exit 1")
+	// stderr tail surfaces (truncated rendering, but content visible)
+	gt.S(t, got).Contains("Reauth required")
+	// Hint surfaces
+	gt.S(t, got).Contains("Hint:").Contains("gcloud auth print-identity-token")
+	// No ANSI when color=false
+	gt.S(t, got).NotContains("\x1b[")
+	// No goerr internals
+	gt.S(t, got).NotContains("error.stacktrace").NotContains("Stacktrace:")
+}
+
+func TestFormatError_RefNotFound_WithSuggestion(t *testing.T) {
+	err := &model.VariableError{
+		Key: "FOO", Path: ".env.hcl",
+		Cause: &model.ReferenceError{
+			Ref:       "GOOGLE_ID_TOKN", // typo
+			Reason:    model.RefNotFound,
+			Available: []string{"GOOGLE_ID_TOKEN", "AWS_KEY", "OTHER"},
+		},
+	}
+	got := cli.FormatError(err, false, false)
+	gt.S(t, got).
+		Contains("not defined").
+		Contains("did you mean").
+		Contains(`"GOOGLE_ID_TOKEN"`)
+}
+
+func TestFormatError_RefCircular_PrintsChain(t *testing.T) {
+	err := &model.VariableError{
+		Key: "A",
+		Cause: &model.ReferenceError{
+			Ref:    "C",
+			Reason: model.RefCircular,
+			Chain:  []string{"A", "B", "C", "A"},
+		},
+	}
+	got := cli.FormatError(err, false, false)
+	gt.S(t, got).
+		Contains("Circular reference").
+		Contains("A -> B -> C -> A").
+		Contains("break the cycle")
+}
+
+func TestFormatError_ConfigFileParseError(t *testing.T) {
+	err := &model.ConfigFileError{
+		Path:   ".env.hcl",
+		Format: model.FormatHCL,
+		Reason: model.ReasonParseError,
+		Detail: "line 12: missing brace",
+	}
+	got := cli.FormatError(err, false, false)
+	gt.S(t, got).
+		Contains("Cannot parse hcl").
+		Contains(".env.hcl").
+		Contains("line 12").
+		Contains("Hint:")
+}
+
+func TestFormatError_VerboseAppendsGoerrTrace(t *testing.T) {
+	innerCause := goerr.New("inner failure")
+	err := &model.VariableError{
+		Key: "X", Path: ".env.hcl",
+		Cause: &model.ResolveError{
+			Op: model.OpReadFile, Target: "/no/such/file", Cause: innerCause,
+		},
+	}
+	verbose := cli.FormatError(err, true, false)
+	terse := cli.FormatError(err, false, false)
+
+	gt.S(t, verbose).Contains("--- debug ---")
+	gt.S(t, terse).NotContains("--- debug ---")
+
+	// Both should contain the friendly summary
+	gt.S(t, terse).Contains(`Failed to resolve variable "X"`)
+	gt.S(t, verbose).Contains(`Failed to resolve variable "X"`)
+}
+
+func TestFormatError_ColorEmitsAnsi(t *testing.T) {
+	err := &model.VariableError{Key: "X", Cause: errors.New("boom")}
+	got := cli.FormatError(err, false, true)
+	gt.S(t, got).Contains("\x1b[")
+}
+
+// Snapshot the realistic output for the BACKSTREAM_HEADER scenario, so the
+// formatting can be eyeballed via `go test -run TestFormatError_Snapshot -v`.
+func TestFormatError_Snapshot(t *testing.T) {
+	cmdErr := &model.CommandExecError{
+		Command:  []string{"gcloud", "auth", "print-identity-token"},
+		ExitCode: 1,
+		Stderr:   "ERROR: (gcloud.auth.print-identity-token) Reauth required.\nPlease run:\n  $ gcloud auth login",
+		Cause:    errors.New("exit status 1"),
+	}
+	refErr := &model.ReferenceError{
+		Ref:    "GOOGLE_ID_TOKEN",
+		Reason: model.RefResolveFailed,
+		Cause:  cmdErr,
+	}
+	varErr := &model.VariableError{
+		Key:     "BACKSTREAM_HEADER",
+		Path:    ".env.hcl",
+		Profile: "dev",
+		Cause:   refErr,
+	}
+
+	t.Log("\n--- terse / no color ---\n" + cli.FormatError(varErr, false, false))
+	t.Log("\n--- verbose / no color ---\n" + cli.FormatError(varErr, true, false))
+}
+
+func TestFormatError_TerseDoesNotLeakInternalWrapChain(t *testing.T) {
+	// Reproduce the historical "failed to load: failed to resolve: failed to
+	// build: failed to resolve reference: failed to execute command" leak.
+	cmdErr := &model.CommandExecError{Command: []string{"x"}, ExitCode: 1}
+	ref := &model.ReferenceError{Ref: "R", Reason: model.RefResolveFailed, Cause: cmdErr}
+	res := &model.ResolveError{Op: model.OpBuildContext, Cause: ref}
+	v := &model.VariableError{Key: "K", Path: "f", Cause: res}
+
+	got := cli.FormatError(v, false, false)
+	// The leak words from the historical message should NOT appear all at once.
+	leakWords := []string{"failed to load", "failed to resolve variable", "failed to build template context"}
+	hits := 0
+	for _, w := range leakWords {
+		if strings.Contains(got, w) {
+			hits++
+		}
+	}
+	gt.N(t, hits).Less(2)
+}

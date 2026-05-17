@@ -3,12 +3,12 @@ package loader
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/m-mizutani/ctxlog"
-	"github.com/m-mizutani/goerr/v2"
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
@@ -23,8 +23,12 @@ func NewDotEnvLoader(path string) LoadFunc {
 				logger.Debug(".env file not found", "path", path)
 				return nil, nil // File not found is acceptable
 			}
-			logger.Error("failed to open .env file", "path", path, "error", err)
-			return nil, goerr.Wrap(err, "failed to open .env file")
+			return nil, &model.ConfigFileError{
+				Path:   path,
+				Format: model.FormatDotEnv,
+				Reason: model.ReasonNotReadable,
+				Cause:  err,
+			}
 		}
 		defer file.Close()
 
@@ -44,10 +48,12 @@ func NewDotEnvLoader(path string) LoadFunc {
 			// Parse KEY=VALUE
 			parts := strings.SplitN(line, "=", 2)
 			if len(parts) != 2 {
-				return nil, goerr.New("invalid format in .env file",
-					goerr.V("line", lineNumber),
-					goerr.V("content", line),
-				)
+				return nil, &model.ConfigFileError{
+					Path:   path,
+					Format: model.FormatDotEnv,
+					Reason: model.ReasonParseError,
+					Detail: fmt.Sprintf("line %d: %q is not in KEY=VALUE format", lineNumber, line),
+				}
 			}
 
 			key := strings.TrimSpace(parts[0])
@@ -69,8 +75,12 @@ func NewDotEnvLoader(path string) LoadFunc {
 		}
 
 		if err := scanner.Err(); err != nil {
-			logger.Error("failed to read .env file", "path", path, "error", err)
-			return nil, goerr.Wrap(err, "failed to read .env file")
+			return nil, &model.ConfigFileError{
+				Path:   path,
+				Format: model.FormatDotEnv,
+				Reason: model.ReasonNotReadable,
+				Cause:  err,
+			}
 		}
 
 		logger.Debug("loaded .env file", "path", path, "variables", len(envVars))

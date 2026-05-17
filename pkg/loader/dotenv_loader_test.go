@@ -2,6 +2,7 @@ package loader_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 
@@ -72,7 +73,10 @@ VALID_KEY=valid_value`
 		_, err := loadFunc(context.Background())
 
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("invalid format")
+		var cfgErr *model.ConfigFileError
+		gt.True(t, errors.As(err, &cfgErr))
+		gt.Equal(t, cfgErr.Format, model.FormatDotEnv)
+		gt.Equal(t, cfgErr.Reason, model.ReasonParseError)
 	})
 
 	t.Run("Handle empty lines and comments", func(t *testing.T) {

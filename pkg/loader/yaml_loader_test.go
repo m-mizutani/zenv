@@ -2,6 +2,7 @@ package loader_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -101,7 +102,10 @@ func TestYAMLLoader(t *testing.T) {
 		loadFunc := loader.NewYAMLLoader("testdata/invalid_syntax.yaml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("failed to parse YAML file")
+		var cfgErr *model.ConfigFileError
+		gt.True(t, errors.As(err, &cfgErr))
+		gt.Equal(t, cfgErr.Reason, model.ReasonParseError)
+		gt.Equal(t, cfgErr.Format, model.FormatYAML)
 	})
 
 	t.Run("Handle validation errors", func(t *testing.T) {
@@ -115,7 +119,9 @@ func TestYAMLLoader(t *testing.T) {
 		loadFunc := loader.NewYAMLLoader("testdata/missing_file.yaml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("failed to read file")
+		var resolveErr *model.ResolveError
+		gt.True(t, errors.As(err, &resolveErr))
+		gt.Equal(t, resolveErr.Op, model.OpReadFile)
 	})
 
 	t.Run("Handle command execution failure", func(t *testing.T) {
@@ -228,7 +234,9 @@ ALIAS_TO_EMPTY:
 		loadFunc := loader.NewYAMLLoader("testdata/alias_missing.yaml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("variable not found")
+		var refErr *model.ReferenceError
+		gt.True(t, errors.As(err, &refErr))
+		gt.Equal(t, refErr.Reason, model.RefNotFound)
 	})
 
 	t.Run("Handle circular alias reference", func(t *testing.T) {
@@ -384,7 +392,9 @@ VAR_NAME:
 		loadFunc := loader.NewYAMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("failed to parse value template")
+		var resolveErr *model.ResolveError
+		gt.True(t, errors.As(err, &resolveErr))
+		gt.Equal(t, resolveErr.Op, model.OpTemplate)
 	})
 
 	t.Run("Template without refs field", func(t *testing.T) {
@@ -727,7 +737,9 @@ TEST_TEMPLATE:
 		// Load and resolve - should error
 		_, err := loader(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("variable not found")
+		var refErr *model.ReferenceError
+		gt.True(t, errors.As(err, &refErr))
+		gt.Equal(t, refErr.Reason, model.RefNotFound)
 	})
 
 	t.Run("Error on missing variable in alias", func(t *testing.T) {
@@ -746,7 +758,9 @@ TEST_ALIAS:
 		// Load and resolve - should error
 		_, err := loader(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("variable not found")
+		var refErr *model.ReferenceError
+		gt.True(t, errors.As(err, &refErr))
+		gt.Equal(t, refErr.Reason, model.RefNotFound)
 	})
 
 	t.Run("Empty string vs missing variable distinction", func(t *testing.T) {
@@ -790,7 +804,9 @@ TEST_MISSING:
 		// Load and resolve - should error
 		_, err = loader2(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("variable not found")
+		var refErr *model.ReferenceError
+		gt.True(t, errors.As(err, &refErr))
+		gt.Equal(t, refErr.Reason, model.RefNotFound)
 	})
 
 	t.Run("Load YAML file with simple format only", func(t *testing.T) {

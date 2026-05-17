@@ -3,6 +3,7 @@ package loader
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +16,10 @@ import (
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 	"gopkg.in/yaml.v3"
 )
+
+// stderrLimit caps how much of a failed command's stderr we retain on
+// CommandExecError. The tail is kept so the most relevant message survives.
+const stderrLimit = 4096
 
 func NewYAMLLoader(path string, existingVars ...[]*model.EnvVar) LoadFunc {
 	return NewYAMLLoaderWithProfile(path, "", existingVars...)
@@ -58,16 +63,24 @@ func NewYAMLLoaderWithProfile(path string, profile string, existingVars ...[]*mo
 			}
 
 			if err := effectiveValue.Validate(); err != nil {
-				logger.Error("invalid YAML configuration", "key", key, "error", err)
-				return nil, goerr.Wrap(err, "invalid configuration", goerr.V("key", key))
+				return nil, &model.ConfigFileError{
+					Path:   path,
+					Format: model.FormatYAML,
+					Reason: model.ReasonInvalidSchema,
+					Detail: fmt.Sprintf("variable %q: %v", key, err),
+					Cause:  err,
+				}
 			}
 
 			logger.Debug("resolving YAML variable", "key", key)
 			resolvedValue, err := resolver.resolveWithValue(key, effectiveValue)
 			if err != nil {
-				logger.Error("failed to resolve YAML variable", "key", key, "error", err)
-				return nil, goerr.Wrap(err, "failed to resolve variable",
-					goerr.V("key", key))
+				return nil, &model.VariableError{
+					Key:     key,
+					Path:    path,
+					Profile: profile,
+					Cause:   err,
+				}
 			}
 
 			envVar := &model.EnvVar{
@@ -94,20 +107,34 @@ func loadAndMergeYAMLFiles(ctx context.Context, path string) (model.YAMLConfig, 
 			if os.IsNotExist(err) {
 				return nil, false, nil // File not found is acceptable
 			}
-			return nil, false, goerr.Wrap(err, "failed to check YAML file", goerr.V("path", filePath))
+			return nil, false, &model.ConfigFileError{
+				Path:   filePath,
+				Format: model.FormatYAML,
+				Reason: model.ReasonNotReadable,
+				Cause:  err,
+			}
 		}
 
 		logger.Debug("loading YAML file", "path", filePath)
 		data, err := os.ReadFile(filePath) // #nosec G304 - file path is user provided and expected
 		if err != nil {
-			logger.Error("failed to read YAML file", "path", filePath, "error", err)
-			return nil, false, goerr.Wrap(err, "failed to read YAML file", goerr.V("path", filePath))
+			return nil, false, &model.ConfigFileError{
+				Path:   filePath,
+				Format: model.FormatYAML,
+				Reason: model.ReasonNotReadable,
+				Cause:  err,
+			}
 		}
 
 		var config model.YAMLConfig
 		if err := yaml.Unmarshal(data, &config); err != nil {
-			logger.Error("failed to parse YAML file", "path", filePath, "error", err)
-			return nil, false, goerr.Wrap(err, "failed to parse YAML file", goerr.V("path", filePath))
+			return nil, false, &model.ConfigFileError{
+				Path:   filePath,
+				Format: model.FormatYAML,
+				Reason: model.ReasonParseError,
+				Detail: err.Error(),
+				Cause:  err,
+			}
 		}
 
 		return config, true, nil
@@ -159,7 +186,13 @@ func loadAndMergeYAMLFiles(ctx context.Context, path string) (model.YAMLConfig, 
 	logger.Debug("merging YAML files", "yaml_path", yamlPath, "yml_path", ymlPath)
 	merged, err := mergeYAMLConfigs(config1, config2)
 	if err != nil {
-		return nil, goerr.Wrap(err, "failed to merge YAML configurations")
+		return nil, &model.ConfigFileError{
+			Path:   yamlPath + " / " + ymlPath,
+			Format: model.FormatYAML,
+			Reason: model.ReasonInvalidSchema,
+			Detail: err.Error(),
+			Cause:  err,
+		}
 	}
 
 	logger.Debug("merged YAML files", "variables", len(merged))
@@ -295,12 +328,24 @@ func readYAMLFile(path string) (string, error) {
 
 func executeYAMLCommand(command []string) (string, error) {
 	if len(command) == 0 {
-		return "", goerr.New("command is empty")
+		return "", &model.CommandExecError{Command: command, Cause: goerr.New("command is empty")}
 	}
 	cmd := exec.Command(command[0], command[1:]...) // #nosec G204 - command is from user-provided YAML config, which is expected
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if err != nil {
-		return "", err
+		exitCode := 0
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		}
+		return "", &model.CommandExecError{
+			Command:  command,
+			ExitCode: exitCode,
+			Stderr:   model.TruncateStderr(stderr.String(), stderrLimit),
+			Cause:    err,
+		}
 	}
 	return strings.TrimSpace(string(output)), nil
 }
@@ -312,6 +357,7 @@ type yamlUnifiedResolver struct {
 	baseDir      string // Base directory for resolving relative file paths
 	resolvedVars map[string]string
 	resolving    map[string]bool   // Track variables currently being resolved
+	stack        []string          // Resolution order, used to report circular chains
 	externalVars map[string]string // Variables from .env files, system environment, and other sources
 }
 
@@ -344,14 +390,25 @@ func newYAMLUnifiedResolverWithProfileAndVars(config model.YAMLConfig, profile s
 	}
 }
 
-// buildTemplateContext resolves all refs and builds a context map for template execution
+// buildTemplateContext resolves all refs and builds a context map for template execution.
+// Errors from inner resolution are wrapped as ReferenceError so the outer layer
+// knows which reference triggered the failure.
 func (r *yamlUnifiedResolver) buildTemplateContext(refs []string) (map[string]string, error) {
 	context := make(map[string]string)
 	for _, ref := range refs {
 		refValue, err := r.resolve(ref)
 		if err != nil {
-			return nil, goerr.Wrap(err, "failed to resolve reference",
-				goerr.V("ref", ref))
+			// If resolve already returned a typed ReferenceError (e.g. RefNotFound
+			// or RefCircular), propagate it as-is to preserve its semantics.
+			var refErr *model.ReferenceError
+			if errors.As(err, &refErr) && refErr.Ref == ref {
+				return nil, err
+			}
+			return nil, &model.ReferenceError{
+				Ref:    ref,
+				Reason: model.RefResolveFailed,
+				Cause:  err,
+			}
 		}
 		context[ref] = refValue
 	}
@@ -366,13 +423,22 @@ func (r *yamlUnifiedResolver) resolve(key string) (string, error) {
 
 	// Check for circular reference
 	if r.resolving[key] {
-		return "", goerr.New("circular reference detected",
-			goerr.V("key", key))
+		chain := append([]string{}, r.stack...)
+		chain = append(chain, key)
+		return "", &model.ReferenceError{
+			Ref:    key,
+			Reason: model.RefCircular,
+			Chain:  chain,
+		}
 	}
 
 	// Mark as currently resolving
 	r.resolving[key] = true
-	defer delete(r.resolving, key)
+	r.stack = append(r.stack, key)
+	defer func() {
+		delete(r.resolving, key)
+		r.stack = r.stack[:len(r.stack)-1]
+	}()
 
 	// Get the configuration for this key
 	config, exists := r.config[key]
@@ -383,8 +449,11 @@ func (r *yamlUnifiedResolver) resolve(key string) (string, error) {
 			return value, nil
 		}
 		// Not found anywhere - return error for missing variable
-		return "", goerr.New("variable not found",
-			goerr.V("key", key))
+		return "", &model.ReferenceError{
+			Ref:       key,
+			Reason:    model.RefNotFound,
+			Available: r.availableNames(),
+		}
 	}
 
 	// Get effective value considering profile
@@ -392,10 +461,27 @@ func (r *yamlUnifiedResolver) resolve(key string) (string, error) {
 	return r.resolveWithValue(key, effectiveValue)
 }
 
+// availableNames returns a sorted list of names the resolver could resolve.
+// Used to populate ReferenceError.Available for "not found" suggestions.
+func (r *yamlUnifiedResolver) availableNames() []string {
+	names := make([]string, 0, len(r.config)+len(r.externalVars))
+	for k := range r.config {
+		names = append(names, k)
+	}
+	for k := range r.externalVars {
+		names = append(names, k)
+	}
+	return names
+}
+
 func (r *yamlUnifiedResolver) resolveWithValue(key string, config *model.YAMLValue) (string, error) {
 	if config == nil {
-		return "", goerr.New("nil configuration for key",
-			goerr.V("key", key))
+		// Indicates a logic bug in the caller; surface it via VariableError so it
+		// still goes through the structured formatting path.
+		return "", &model.VariableError{
+			Key:   key,
+			Cause: goerr.New("nil configuration"),
+		}
 	}
 
 	// Resolve based on type
@@ -406,24 +492,30 @@ func (r *yamlUnifiedResolver) resolveWithValue(key string, config *model.YAMLVal
 	case config.Value != nil:
 		// If refs are present, treat value as a template
 		if len(config.Refs) > 0 {
-			// Build context for template
+			// Build context for template; ReferenceError-typed errors are passed
+			// through so the formatter can describe which ref failed.
 			context, err := r.buildTemplateContext(config.Refs)
 			if err != nil {
-				return "", goerr.Wrap(err, "failed to build template context")
+				return "", err
 			}
 
 			// Parse and execute template
 			tmpl, err := template.New("env").Parse(*config.Value)
 			if err != nil {
-				return "", goerr.Wrap(err, "failed to parse value template",
-					goerr.V("value", *config.Value))
+				return "", &model.ResolveError{
+					Op:     model.OpTemplate,
+					Target: *config.Value,
+					Cause:  err,
+				}
 			}
 
 			var buf bytes.Buffer
 			if err := tmpl.Execute(&buf, context); err != nil {
-				return "", goerr.Wrap(err, "failed to execute value template",
-					goerr.V("value", *config.Value),
-					goerr.V("key", key))
+				return "", &model.ResolveError{
+					Op:     model.OpTemplate,
+					Target: *config.Value,
+					Cause:  err,
+				}
 			}
 
 			resolvedValue = buf.String()
@@ -439,8 +531,11 @@ func (r *yamlUnifiedResolver) resolveWithValue(key string, config *model.YAMLVal
 		}
 		resolvedValue, err = readYAMLFile(filePath)
 		if err != nil {
-			return "", goerr.Wrap(err, "failed to read file",
-				goerr.V("file", *config.File))
+			return "", &model.ResolveError{
+				Op:     model.OpReadFile,
+				Target: *config.File,
+				Cause:  err,
+			}
 		}
 
 	case len(config.Command) > 0:
@@ -452,7 +547,7 @@ func (r *yamlUnifiedResolver) resolveWithValue(key string, config *model.YAMLVal
 			// Build context for template
 			context, err := r.buildTemplateContext(config.Refs)
 			if err != nil {
-				return "", goerr.Wrap(err, "failed to build command template context")
+				return "", err
 			}
 
 			// Apply template to each command element
@@ -461,32 +556,46 @@ func (r *yamlUnifiedResolver) resolveWithValue(key string, config *model.YAMLVal
 			for i, cmdElement := range config.Command {
 				parsedTmpl, err := tmpl.Parse(cmdElement)
 				if err != nil {
-					return "", goerr.Wrap(err, "failed to parse command template",
-						goerr.V("element", cmdElement))
+					return "", &model.ResolveError{
+						Op:     model.OpTemplate,
+						Target: cmdElement,
+						Cause:  err,
+					}
 				}
 
 				var buf bytes.Buffer
 				if err := parsedTmpl.Execute(&buf, context); err != nil {
-					return "", goerr.Wrap(err, "failed to execute command template",
-						goerr.V("element", cmdElement))
+					return "", &model.ResolveError{
+						Op:     model.OpTemplate,
+						Target: cmdElement,
+						Cause:  err,
+					}
 				}
 				resolvedCommand[i] = buf.String()
 			}
 			commandToExecute = resolvedCommand
 		}
 
+		// executeYAMLCommand already returns a CommandExecError on failure.
 		resolvedValue, err = executeYAMLCommand(commandToExecute)
 		if err != nil {
-			return "", goerr.Wrap(err, "failed to execute command",
-				goerr.V("command", commandToExecute))
+			return "", err
 		}
 
 	case config.Alias != nil:
-		// Recursively resolve the alias target
+		// Recursively resolve the alias target.
 		resolvedValue, err = r.resolve(*config.Alias)
 		if err != nil {
-			return "", goerr.Wrap(err, "failed to resolve alias",
-				goerr.V("alias", *config.Alias))
+			// If resolve already returned ReferenceError-typed, pass through.
+			var refErr *model.ReferenceError
+			if errors.As(err, &refErr) && refErr.Ref == *config.Alias {
+				return "", err
+			}
+			return "", &model.ReferenceError{
+				Ref:    *config.Alias,
+				Reason: model.RefResolveFailed,
+				Cause:  err,
+			}
 		}
 	}
 
