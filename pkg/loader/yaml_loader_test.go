@@ -12,10 +12,22 @@ import (
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
+// newYAMLLoader / newYAMLLoaderWithProfile are mustExist=false wrappers used
+// throughout this test file to keep existing call sites concise. The strict
+// (mustExist=true) behavior is covered in dedicated test cases that call the
+// production constructors directly.
+func newYAMLLoader(path string, existingVars ...[]*model.EnvVar) loader.LoadFunc {
+	return loader.NewYAMLLoader(path, false, existingVars...)
+}
+
+func newYAMLLoaderWithProfile(path, profile string, existingVars ...[]*model.EnvVar) loader.LoadFunc {
+	return loader.NewYAMLLoaderWithProfile(path, profile, false, existingVars...)
+}
+
 func TestYAMLLoader(t *testing.T) {
 
 	t.Run("Load valid YAML file with static values", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/valid.yaml")
+		loadFunc := newYAMLLoader("testdata/valid.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 3)
@@ -36,7 +48,7 @@ func TestYAMLLoader(t *testing.T) {
 	})
 
 	t.Run("Load YAML file with file reference", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/with_file.yaml")
+		loadFunc := newYAMLLoader("testdata/with_file.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 1)
@@ -46,7 +58,7 @@ func TestYAMLLoader(t *testing.T) {
 	})
 
 	t.Run("File path is resolved relative to YAML file directory", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/subdir/with_file_relative.yaml")
+		loadFunc := newYAMLLoader("testdata/subdir/with_file_relative.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 1)
@@ -55,7 +67,7 @@ func TestYAMLLoader(t *testing.T) {
 	})
 
 	t.Run("File path in same directory as YAML file", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/subdir/with_file_same_dir.yaml")
+		loadFunc := newYAMLLoader("testdata/subdir/with_file_same_dir.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 1)
@@ -74,7 +86,7 @@ func TestYAMLLoader(t *testing.T) {
 		yamlPath := filepath.Join(tmpDir, ".env.yaml")
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0600))
 
-		loadFunc := loader.NewYAMLLoader(yamlPath)
+		loadFunc := newYAMLLoader(yamlPath)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 1)
@@ -83,7 +95,7 @@ func TestYAMLLoader(t *testing.T) {
 	})
 
 	t.Run("Load YAML file with command execution", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/with_command.yaml")
+		loadFunc := newYAMLLoader("testdata/with_command.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 1)
@@ -92,14 +104,24 @@ func TestYAMLLoader(t *testing.T) {
 		gt.Equal(t, envVars[0].Source, model.SourceYAML)
 	})
 
-	t.Run("Handle non-existent file", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/non_existent.yaml")
+	t.Run("Handle non-existent file when mustExist=false", func(t *testing.T) {
+		loadFunc := newYAMLLoader("testdata/non_existent.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 		gt.Nil(t, envVars)
 	})
 
+	t.Run("Error on non-existent file when mustExist=true", func(t *testing.T) {
+		loadFunc := loader.NewYAMLLoader("testdata/non_existent.yaml", true)
+		_, err := loadFunc(context.Background())
+		gt.Error(t, err)
+		var cfgErr *model.ConfigFileError
+		gt.True(t, errors.As(err, &cfgErr))
+		gt.Equal(t, cfgErr.Format, model.FormatYAML)
+		gt.Equal(t, cfgErr.Reason, model.ReasonNotFound)
+	})
+
 	t.Run("Handle invalid YAML syntax", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/invalid_syntax.yaml")
+		loadFunc := newYAMLLoader("testdata/invalid_syntax.yaml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		var cfgErr *model.ConfigFileError
@@ -109,14 +131,14 @@ func TestYAMLLoader(t *testing.T) {
 	})
 
 	t.Run("Handle validation errors", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/validation_error.yaml")
+		loadFunc := newYAMLLoader("testdata/validation_error.yaml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("multiple value types specified")
 	})
 
 	t.Run("Handle missing file reference", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/missing_file.yaml")
+		loadFunc := newYAMLLoader("testdata/missing_file.yaml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		var resolveErr *model.ResolveError
@@ -125,14 +147,14 @@ func TestYAMLLoader(t *testing.T) {
 	})
 
 	t.Run("Handle command execution failure", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/command_failure.yaml")
+		loadFunc := newYAMLLoader("testdata/command_failure.yaml")
 		_, err := loadFunc(context.Background())
 		// The 'false' command exits with non-zero status
 		gt.Error(t, err)
 	})
 
 	t.Run("Load YAML file with alias", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/alias.yaml")
+		loadFunc := newYAMLLoader("testdata/alias.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		// Check that alias resolves correctly
@@ -151,7 +173,7 @@ func TestYAMLLoader(t *testing.T) {
 		// Set a system environment variable for testing
 		t.Setenv("TEST_SYSTEM_VAR", "system_value")
 
-		loadFunc := loader.NewYAMLLoader("testdata/alias_system.yaml")
+		loadFunc := newYAMLLoader("testdata/alias_system.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		// Find the MY_VAR environment variable
@@ -183,7 +205,7 @@ ALIAS_TO_SHARED:
 		gt.R1(tmpFile.WriteString(yamlContent)).NoError(t)
 		tmpFile.Close()
 
-		loadFunc := loader.NewYAMLLoader(tmpFile.Name())
+		loadFunc := newYAMLLoader(tmpFile.Name())
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		// Find the ALIAS_TO_SHARED variable
@@ -212,7 +234,7 @@ ALIAS_TO_EMPTY:
 		gt.R1(tmpFile.WriteString(yamlContent)).NoError(t)
 		tmpFile.Close()
 
-		loadFunc := loader.NewYAMLLoader(tmpFile.Name())
+		loadFunc := newYAMLLoader(tmpFile.Name())
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		// Find the ALIAS_TO_EMPTY variable
@@ -231,7 +253,7 @@ ALIAS_TO_EMPTY:
 	})
 
 	t.Run("Alias with non-existent target returns error", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/alias_missing.yaml")
+		loadFunc := newYAMLLoader("testdata/alias_missing.yaml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		var refErr *model.ReferenceError
@@ -240,14 +262,14 @@ ALIAS_TO_EMPTY:
 	})
 
 	t.Run("Handle circular alias reference", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/circular_alias.yaml")
+		loadFunc := newYAMLLoader("testdata/circular_alias.yaml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("circular reference")
 	})
 
 	t.Run("Validation error when multiple types including alias", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/alias_multiple_types.yaml")
+		loadFunc := newYAMLLoader("testdata/alias_multiple_types.yaml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("multiple value types specified")
@@ -255,7 +277,7 @@ ALIAS_TO_EMPTY:
 
 	// Template tests
 	t.Run("Load YAML file with basic template", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/template.yaml")
+		loadFunc := newYAMLLoader("testdata/template.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		// Check that template resolves correctly
@@ -276,7 +298,7 @@ ALIAS_TO_EMPTY:
 	})
 
 	t.Run("Template with conditional logic", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/template.yaml")
+		loadFunc := newYAMLLoader("testdata/template.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		vars := make(map[string]string)
@@ -303,7 +325,7 @@ FROM_SYSTEM:
 		gt.R1(tmpFile.WriteString(yamlContent)).NoError(t)
 		tmpFile.Close()
 
-		loadFunc := loader.NewYAMLLoader(tmpFile.Name())
+		loadFunc := newYAMLLoader(tmpFile.Name())
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		// Find the FROM_SYSTEM variable
@@ -319,7 +341,7 @@ FROM_SYSTEM:
 	})
 
 	t.Run("Template with empty reference", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/template_complex.yaml")
+		loadFunc := newYAMLLoader("testdata/template_complex.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		vars := make(map[string]string)
@@ -336,7 +358,7 @@ FROM_SYSTEM:
 	})
 
 	t.Run("Template with nested references", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/template_complex.yaml")
+		loadFunc := newYAMLLoader("testdata/template_complex.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		vars := make(map[string]string)
@@ -355,7 +377,7 @@ FROM_SYSTEM:
 	})
 
 	t.Run("Template with complex logic", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/template_complex.yaml")
+		loadFunc := newYAMLLoader("testdata/template_complex.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		vars := make(map[string]string)
@@ -368,7 +390,7 @@ FROM_SYSTEM:
 	})
 
 	t.Run("Handle circular template reference", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/template_circular.yaml")
+		loadFunc := newYAMLLoader("testdata/template_circular.yaml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("circular reference")
@@ -389,7 +411,7 @@ VAR_NAME:
 		gt.R1(tmpFile.WriteString(yamlContent)).NoError(t)
 		tmpFile.Close()
 
-		loadFunc := loader.NewYAMLLoader(tmpFile.Name())
+		loadFunc := newYAMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		var resolveErr *model.ResolveError
@@ -408,7 +430,7 @@ NO_REFS:
 		gt.R1(tmpFile.WriteString(yamlContent)).NoError(t)
 		tmpFile.Close()
 
-		loadFunc := loader.NewYAMLLoader(tmpFile.Name())
+		loadFunc := newYAMLLoader(tmpFile.Name())
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 1)
@@ -427,7 +449,7 @@ REFS_ONLY:
 		gt.R1(tmpFile.WriteString(yamlContent)).NoError(t)
 		tmpFile.Close()
 
-		loadFunc := loader.NewYAMLLoader(tmpFile.Name())
+		loadFunc := newYAMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("refs can only be used with value or command")
@@ -445,7 +467,7 @@ MULTIPLE_TYPES:
 		gt.R1(tmpFile.WriteString(yamlContent)).NoError(t)
 		tmpFile.Close()
 
-		loadFunc := loader.NewYAMLLoader(tmpFile.Name())
+		loadFunc := newYAMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("multiple value types specified")
@@ -465,7 +487,7 @@ ALIAS_VAR:
 		gt.R1(tmpFile.WriteString(yamlContent)).NoError(t)
 		tmpFile.Close()
 
-		loadFunc := loader.NewYAMLLoader(tmpFile.Name())
+		loadFunc := newYAMLLoader(tmpFile.Name())
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		vars := make(map[string]string)
@@ -479,7 +501,7 @@ ALIAS_VAR:
 	})
 
 	t.Run("Alias pointing to template variable with refs", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/alias_to_template.yaml")
+		loadFunc := newYAMLLoader("testdata/alias_to_template.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		vars := make(map[string]string)
@@ -498,7 +520,7 @@ ALIAS_VAR:
 	})
 
 	t.Run("Handle complex circular references (alias->template->alias)", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/complex_circular.yaml")
+		loadFunc := newYAMLLoader("testdata/complex_circular.yaml")
 		_, err := loadFunc(context.Background())
 
 		// Should detect circular reference in any of the complex cases
@@ -524,7 +546,7 @@ VAR_C:
 		gt.R1(tmpFile.WriteString(yamlContent)).NoError(t)
 		tmpFile.Close()
 
-		loadFunc := loader.NewYAMLLoader(tmpFile.Name())
+		loadFunc := newYAMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
 
 		gt.Error(t, err)
@@ -546,7 +568,7 @@ SELF_ALIAS:
 		gt.R1(tmpFile.WriteString(yamlContent)).NoError(t)
 		tmpFile.Close()
 
-		loadFunc := loader.NewYAMLLoader(tmpFile.Name())
+		loadFunc := newYAMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
 
 		gt.Error(t, err)
@@ -573,7 +595,7 @@ DB_URL:
 		}
 
 		// Create YAML loader with existing variables
-		loader := loader.NewYAMLLoader(yamlPath, existingVars)
+		loader := newYAMLLoader(yamlPath, existingVars)
 
 		// Load and resolve
 		vars, err := loader(context.Background())
@@ -599,7 +621,7 @@ PRIMARY_DB:
 		}
 
 		// Create YAML loader with existing variables
-		loader := loader.NewYAMLLoader(yamlPath, existingVars)
+		loader := newYAMLLoader(yamlPath, existingVars)
 
 		// Load and resolve
 		vars, err := loader(context.Background())
@@ -633,7 +655,7 @@ RESULT:
 		}
 
 		// Create YAML loader with existing variables
-		loader := loader.NewYAMLLoader(yamlPath, existingVars)
+		loader := newYAMLLoader(yamlPath, existingVars)
 
 		// Load and resolve
 		vars, err := loader(context.Background())
@@ -680,7 +702,7 @@ FULL_URL:
 		}
 
 		// Create YAML loader with existing variables
-		loader := loader.NewYAMLLoader(yamlPath, existingVars)
+		loader := newYAMLLoader(yamlPath, existingVars)
 
 		// Load and resolve
 		vars, err := loader(context.Background())
@@ -710,7 +732,7 @@ SIMPLE_VAR:
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 
 		// Create YAML loader without external variables (backward compatibility)
-		loader := loader.NewYAMLLoader(yamlPath)
+		loader := newYAMLLoader(yamlPath)
 
 		// Load and resolve
 		vars, err := loader(context.Background())
@@ -732,7 +754,7 @@ TEST_TEMPLATE:
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 
 		// Create YAML loader
-		loader := loader.NewYAMLLoader(yamlPath)
+		loader := newYAMLLoader(yamlPath)
 
 		// Load and resolve - should error
 		_, err := loader(context.Background())
@@ -753,7 +775,7 @@ TEST_ALIAS:
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 
 		// Create YAML loader
-		loader := loader.NewYAMLLoader(yamlPath)
+		loader := newYAMLLoader(yamlPath)
 
 		// Load and resolve - should error
 		_, err := loader(context.Background())
@@ -780,7 +802,7 @@ TEST_EMPTY:
 		}
 
 		// Create YAML loader with empty variable
-		loader1 := loader.NewYAMLLoader(yamlPath1, existingVars)
+		loader1 := newYAMLLoader(yamlPath1, existingVars)
 
 		// Load and resolve - should succeed with empty string
 		vars, err := loader1(context.Background())
@@ -799,7 +821,7 @@ TEST_MISSING:
 		gt.NoError(t, os.WriteFile(yamlPath2, []byte(yamlContent2), 0644))
 
 		// Create YAML loader without the required variable
-		loader2 := loader.NewYAMLLoader(yamlPath2, existingVars) // MISSING_VAR not in existingVars
+		loader2 := newYAMLLoader(yamlPath2, existingVars) // MISSING_VAR not in existingVars
 
 		// Load and resolve - should error
 		_, err = loader2(context.Background())
@@ -810,7 +832,7 @@ TEST_MISSING:
 	})
 
 	t.Run("Load YAML file with simple format only", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/simple_format.yaml")
+		loadFunc := newYAMLLoader("testdata/simple_format.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 4)
@@ -832,7 +854,7 @@ TEST_MISSING:
 	})
 
 	t.Run("Load YAML file with mixed format", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/mixed_format.yaml")
+		loadFunc := newYAMLLoader("testdata/mixed_format.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		// All top-level keys are loaded (no section scope issue in YAML)
@@ -876,7 +898,7 @@ TEST_MISSING:
 		err := os.WriteFile(tmpFile, []byte("PORT: 123\nDEBUG: true\nNAME: \"test\""), 0644)
 		gt.NoError(t, err)
 
-		loadFunc := loader.NewYAMLLoader(tmpFile)
+		loadFunc := newYAMLLoader(tmpFile)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 		gt.Equal(t, len(envVars), 3)
@@ -893,7 +915,7 @@ TEST_MISSING:
 	})
 
 	t.Run("Command with refs", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/command_with_refs.yaml")
+		loadFunc := newYAMLLoader("testdata/command_with_refs.yaml")
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -932,14 +954,14 @@ TEST_MISSING:
 	})
 
 	t.Run("Command with circular refs should fail", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/command_circular_refs.yaml")
+		loadFunc := newYAMLLoader("testdata/command_circular_refs.yaml")
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("circular reference")
 	})
 
 	t.Run("Command without refs should work", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/with_command.yaml")
+		loadFunc := newYAMLLoader("testdata/with_command.yaml")
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -955,7 +977,7 @@ TEST_MISSING:
 
 func TestProfileBasic(t *testing.T) {
 	t.Run("loads default values when no profile specified", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_basic.yaml", "", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_basic.yaml", "", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -970,7 +992,7 @@ func TestProfileBasic(t *testing.T) {
 	})
 
 	t.Run("loads dev profile values", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_basic.yaml", "dev", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_basic.yaml", "dev", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -985,7 +1007,7 @@ func TestProfileBasic(t *testing.T) {
 	})
 
 	t.Run("loads staging profile values", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_basic.yaml", "staging", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_basic.yaml", "staging", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1000,7 +1022,7 @@ func TestProfileBasic(t *testing.T) {
 	})
 
 	t.Run("loads prod profile values", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_basic.yaml", "prod", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_basic.yaml", "prod", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1015,7 +1037,7 @@ func TestProfileBasic(t *testing.T) {
 	})
 
 	t.Run("unknown profile uses default values", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_basic.yaml", "unknown", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_basic.yaml", "unknown", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1032,7 +1054,7 @@ func TestProfileBasic(t *testing.T) {
 
 func TestProfileUnset(t *testing.T) {
 	t.Run("empty object unsets variable in prod profile", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_unset.yaml", "prod", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_unset.yaml", "prod", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1053,7 +1075,7 @@ func TestProfileUnset(t *testing.T) {
 	})
 
 	t.Run("dev profile has all variables", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_unset.yaml", "dev", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_unset.yaml", "dev", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1068,7 +1090,7 @@ func TestProfileUnset(t *testing.T) {
 	})
 
 	t.Run("default profile has all variables", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_unset.yaml", "", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_unset.yaml", "", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1085,7 +1107,7 @@ func TestProfileUnset(t *testing.T) {
 
 func TestProfileAdvanced(t *testing.T) {
 	t.Run("profile with file reference", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_advanced.yaml", "dev", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_advanced.yaml", "dev", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1099,7 +1121,7 @@ func TestProfileAdvanced(t *testing.T) {
 	})
 
 	t.Run("profile with value override", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_advanced.yaml", "staging", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_advanced.yaml", "staging", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1113,7 +1135,7 @@ func TestProfileAdvanced(t *testing.T) {
 	})
 
 	t.Run("profile with command execution", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_advanced.yaml", "prod", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_advanced.yaml", "prod", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1126,7 +1148,7 @@ func TestProfileAdvanced(t *testing.T) {
 	})
 
 	t.Run("profile with alias", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_advanced.yaml", "staging", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_advanced.yaml", "staging", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1140,7 +1162,7 @@ func TestProfileAdvanced(t *testing.T) {
 	})
 
 	t.Run("profile with template", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_advanced.yaml", "dev", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_advanced.yaml", "dev", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1158,7 +1180,7 @@ func TestProfileAdvanced(t *testing.T) {
 
 func TestProfileCompatibility(t *testing.T) {
 	t.Run("backward compatibility with no profile", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_compat.yaml", "", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_compat.yaml", "", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1176,7 +1198,7 @@ func TestProfileCompatibility(t *testing.T) {
 	})
 
 	t.Run("profile selection with mixed variables", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_compat.yaml", "dev", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_compat.yaml", "dev", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1196,7 +1218,7 @@ func TestProfileCompatibility(t *testing.T) {
 	})
 
 	t.Run("profile with partial coverage", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_compat.yaml", "staging", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_compat.yaml", "staging", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1214,7 +1236,7 @@ func TestProfileCompatibility(t *testing.T) {
 
 func TestProfileNestedValidation(t *testing.T) {
 	t.Run("nested profile in YAML should be rejected", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_nested.yaml", "", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_nested.yaml", "", nil)
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("nested profile")
@@ -1223,7 +1245,7 @@ func TestProfileNestedValidation(t *testing.T) {
 
 func TestProfileDottedKeyFormat(t *testing.T) {
 	t.Run("self-referencing dotted key format", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_self_reference.yaml", "dev", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_self_reference.yaml", "dev", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1236,7 +1258,7 @@ func TestProfileDottedKeyFormat(t *testing.T) {
 	})
 
 	t.Run("self-referencing dotted key default", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_self_reference.yaml", "", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_self_reference.yaml", "", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1249,7 +1271,7 @@ func TestProfileDottedKeyFormat(t *testing.T) {
 	})
 
 	t.Run("dotted key format with dev profile", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_dotted.yaml", "dev", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_dotted.yaml", "dev", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1263,7 +1285,7 @@ func TestProfileDottedKeyFormat(t *testing.T) {
 	})
 
 	t.Run("dotted key format with staging profile", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_dotted.yaml", "staging", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_dotted.yaml", "staging", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1277,7 +1299,7 @@ func TestProfileDottedKeyFormat(t *testing.T) {
 	})
 
 	t.Run("dotted key format with prod profile", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_dotted.yaml", "prod", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_dotted.yaml", "prod", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1291,7 +1313,7 @@ func TestProfileDottedKeyFormat(t *testing.T) {
 	})
 
 	t.Run("dotted key format with default profile", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_dotted.yaml", "", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_dotted.yaml", "", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1307,7 +1329,7 @@ func TestProfileDottedKeyFormat(t *testing.T) {
 
 func TestProfileInlineFormat(t *testing.T) {
 	t.Run("inline table format should work", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_inline.yaml", "dev", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_inline.yaml", "dev", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1321,7 +1343,7 @@ func TestProfileInlineFormat(t *testing.T) {
 	})
 
 	t.Run("inline format with staging profile", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_inline.yaml", "staging", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_inline.yaml", "staging", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1335,7 +1357,7 @@ func TestProfileInlineFormat(t *testing.T) {
 	})
 
 	t.Run("inline string format should work", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_inline_string.yaml", "dev", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_inline_string.yaml", "dev", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1349,7 +1371,7 @@ func TestProfileInlineFormat(t *testing.T) {
 	})
 
 	t.Run("inline string format default values", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_inline_string.yaml", "", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_inline_string.yaml", "", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1365,7 +1387,7 @@ func TestProfileInlineFormat(t *testing.T) {
 
 func TestProfileNilHandling(t *testing.T) {
 	t.Run("nil profile value should be skipped", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_unset.yaml", "nonexistent", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_unset.yaml", "nonexistent", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1380,7 +1402,7 @@ func TestProfileNilHandling(t *testing.T) {
 	})
 
 	t.Run("empty object unsets variable correctly", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/profile_unset.yaml", "prod", nil)
+		loadFunc := newYAMLLoaderWithProfile("testdata/profile_unset.yaml", "prod", nil)
 		envVars, err := loadFunc(context.Background())
 		gt.NoError(t, err)
 
@@ -1408,7 +1430,7 @@ API_KEY: "secret123"
 `
 		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
 
-		loadFunc := loader.NewYAMLLoader(filepath.Join(tmpDir, ".env.yaml"))
+		loadFunc := newYAMLLoader(filepath.Join(tmpDir, ".env.yaml"))
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 2)
@@ -1430,7 +1452,7 @@ API_KEY: "yaml-secret"
 `
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 
-		loadFunc := loader.NewYAMLLoader(yamlPath)
+		loadFunc := newYAMLLoader(yamlPath)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 2)
@@ -1459,7 +1481,7 @@ LOG_LEVEL: "info"
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
 
-		loadFunc := loader.NewYAMLLoader(yamlPath)
+		loadFunc := newYAMLLoader(yamlPath)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 4)
@@ -1493,7 +1515,7 @@ REDIS_URL: "redis://localhost:6379"
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
 
-		loadFunc := loader.NewYAMLLoader(yamlPath)
+		loadFunc := newYAMLLoader(yamlPath)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		varMap := make(map[string]string)
@@ -1524,7 +1546,7 @@ TEMPLATE:
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
 
-		loadFunc := loader.NewYAMLLoader(yamlPath)
+		loadFunc := newYAMLLoader(yamlPath)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		varMap := make(map[string]string)
@@ -1558,17 +1580,17 @@ API_URL:
 		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
 
 		// Test dev profile
-		loadFuncDev := loader.NewYAMLLoaderWithProfile(yamlPath, "dev", nil)
+		loadFuncDev := newYAMLLoaderWithProfile(yamlPath, "dev", nil)
 		envVarsDev := gt.R1(loadFuncDev(context.Background())).NoError(t)
 		gt.Equal(t, envVarsDev[0].Value, "http://localhost:8080")
 
 		// Test staging profile
-		loadFuncStaging := loader.NewYAMLLoaderWithProfile(yamlPath, "staging", nil)
+		loadFuncStaging := newYAMLLoaderWithProfile(yamlPath, "staging", nil)
 		envVarsStaging := gt.R1(loadFuncStaging(context.Background())).NoError(t)
 		gt.Equal(t, envVarsStaging[0].Value, "https://staging.example.com")
 
 		// Test default profile
-		loadFuncDefault := loader.NewYAMLLoaderWithProfile(yamlPath, "", nil)
+		loadFuncDefault := newYAMLLoaderWithProfile(yamlPath, "", nil)
 		envVarsDefault := gt.R1(loadFuncDefault(context.Background())).NoError(t)
 		gt.Equal(t, envVarsDefault[0].Value, "https://api.example.com")
 	})
@@ -1594,7 +1616,7 @@ API_URL:
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
 
-		loadFunc := loader.NewYAMLLoaderWithProfile(yamlPath, "dev", nil)
+		loadFunc := newYAMLLoaderWithProfile(yamlPath, "dev", nil)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 		gt.Equal(t, envVars[0].Value, "http://localhost:9090")
 	})
@@ -1615,7 +1637,7 @@ DATABASE_URL:
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
 
-		loadFunc := loader.NewYAMLLoader(yamlPath)
+		loadFunc := newYAMLLoader(yamlPath)
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("conflicting field \"value\"")
@@ -1638,7 +1660,7 @@ SSL_CERT:
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
 
-		loadFunc := loader.NewYAMLLoader(yamlPath)
+		loadFunc := newYAMLLoader(yamlPath)
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("conflicting field \"file\"")
@@ -1661,7 +1683,7 @@ HOSTNAME:
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
 
-		loadFunc := loader.NewYAMLLoader(yamlPath)
+		loadFunc := newYAMLLoader(yamlPath)
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("conflicting field \"command\"")
@@ -1686,7 +1708,7 @@ DB_URL:
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
 
-		loadFunc := loader.NewYAMLLoader(yamlPath)
+		loadFunc := newYAMLLoader(yamlPath)
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
 		gt.S(t, err.Error()).Contains("conflicting field \"alias\"")
@@ -1697,7 +1719,7 @@ DB_URL:
 		tmpDir := t.TempDir()
 		yamlPath := filepath.Join(tmpDir, ".env.yaml")
 
-		loadFunc := loader.NewYAMLLoader(yamlPath)
+		loadFunc := newYAMLLoader(yamlPath)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 		gt.Nil(t, envVars)
 	})
@@ -1710,7 +1732,7 @@ API_KEY: "secret123"`
 		gt.NoError(t, os.WriteFile(ymlPath, []byte(ymlContent), 0644))
 
 		// Pass .yml path directly - should not try to load the same file twice
-		loadFunc := loader.NewYAMLLoader(ymlPath)
+		loadFunc := newYAMLLoader(ymlPath)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 2)
@@ -1731,7 +1753,7 @@ PORT: "8080"`
 		gt.NoError(t, os.WriteFile(yamlPath, []byte(yamlContent), 0644))
 
 		// Pass .yaml path directly
-		loadFunc := loader.NewYAMLLoader(yamlPath)
+		loadFunc := newYAMLLoader(yamlPath)
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 2)
@@ -1748,7 +1770,7 @@ PORT: "8080"`
 func TestYAMLLoaderSecret(t *testing.T) {
 
 	t.Run("Secret flag is propagated to EnvVar", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoader("testdata/secret.yaml")
+		loadFunc := newYAMLLoader("testdata/secret.yaml")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		gt.Equal(t, len(envVars), 3)
@@ -1764,7 +1786,7 @@ func TestYAMLLoaderSecret(t *testing.T) {
 	})
 
 	t.Run("Secret flag inherited from base in profile", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/secret_profile.yaml", "dev")
+		loadFunc := newYAMLLoaderWithProfile("testdata/secret_profile.yaml", "dev")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		varMap := make(map[string]*model.EnvVar)
@@ -1779,7 +1801,7 @@ func TestYAMLLoaderSecret(t *testing.T) {
 	})
 
 	t.Run("Secret flag not set in profile when base has no secret", func(t *testing.T) {
-		loadFunc := loader.NewYAMLLoaderWithProfile("testdata/secret_profile.yaml", "")
+		loadFunc := newYAMLLoaderWithProfile("testdata/secret_profile.yaml", "")
 		envVars := gt.R1(loadFunc(context.Background())).NoError(t)
 
 		varMap := make(map[string]*model.EnvVar)

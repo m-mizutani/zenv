@@ -584,3 +584,18 @@ For additional support, see:
 - [v1 Documentation](https://github.com/m-mizutani/zenv/blob/main/README.md) for v1 features
 - [v2 Documentation](../README.md) for v2 features  
 - [GitHub Issues](https://github.com/m-mizutani/zenv/issues) for bug reports and questions
+
+## v2 Strict CLI Validation
+
+Starting from this release, `zenv` no longer silently swallows explicit CLI input that points at something missing or invalid. The following situations now produce a clear error and a non-zero exit status:
+
+| Flag | What used to happen | What happens now |
+|------|---------------------|------------------|
+| `-e <path>` / `--env <path>` | Missing file was silently skipped | Errors out with `missing dotenv file <path>` |
+| `-c <path>` / `--config <path>` | Missing YAML/HCL file was silently skipped | Errors out with `missing yaml config file <path>` (or `hcl`) |
+| `-p <profile>` / `--profile <profile>` | Unknown profile silently fell back to the default values | Errors out with the list of profiles actually defined in the loaded configuration |
+| `-l <level>` / `--log-level <level>` | Unknown level silently fell back to `warn` | Errors out with the accepted level names |
+
+The tolerant default-discovery behavior is unchanged: when `-e` / `-c` are omitted, the absence of `.env`, `.env.yaml`, `.env.yml`, and `.env.hcl` is still ignored. Only explicit flag values are validated strictly.
+
+If you have scripts that intentionally pass an optional configuration path, drop the flag when the file is not present (or add an existence check in the wrapper script).

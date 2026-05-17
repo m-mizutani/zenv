@@ -3,7 +3,9 @@ package loader
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,16 +14,27 @@ import (
 	"github.com/m-mizutani/zenv/v2/pkg/model"
 )
 
-func NewDotEnvLoader(path string) LoadFunc {
+// NewDotEnvLoader builds a loader for a single .env file. When mustExist is
+// true, a missing file is reported as an error; otherwise it is silently
+// skipped (used for the default .env path).
+func NewDotEnvLoader(path string, mustExist bool) LoadFunc {
 	return func(ctx context.Context) ([]*model.EnvVar, error) {
 		logger := ctxlog.From(ctx)
 		logger.Debug("loading .env file", "path", path)
 
 		file, err := os.Open(filepath.Clean(path))
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, fs.ErrNotExist) {
+				if mustExist {
+					return nil, &model.ConfigFileError{
+						Path:   path,
+						Format: model.FormatDotEnv,
+						Reason: model.ReasonNotFound,
+						Cause:  err,
+					}
+				}
 				logger.Debug(".env file not found", "path", path)
-				return nil, nil // File not found is acceptable
+				return nil, nil
 			}
 			return nil, &model.ConfigFileError{
 				Path:   path,

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,16 +22,21 @@ import (
 // CommandExecError. The tail is kept so the most relevant message survives.
 const stderrLimit = 4096
 
-func NewYAMLLoader(path string, existingVars ...[]*model.EnvVar) LoadFunc {
-	return NewYAMLLoaderWithProfile(path, "", existingVars...)
+// NewYAMLLoader builds a loader without profile awareness. When mustExist is
+// true, the absence of every candidate file (.yaml and .yml) is reported as an
+// error; otherwise the loader silently returns nil.
+func NewYAMLLoader(path string, mustExist bool, existingVars ...[]*model.EnvVar) LoadFunc {
+	return NewYAMLLoaderWithProfile(path, "", mustExist, existingVars...)
 }
 
-func NewYAMLLoaderWithProfile(path string, profile string, existingVars ...[]*model.EnvVar) LoadFunc {
+// NewYAMLLoaderWithProfile is the profile-aware variant of NewYAMLLoader. See
+// NewYAMLLoader for the mustExist semantics.
+func NewYAMLLoaderWithProfile(path string, profile string, mustExist bool, existingVars ...[]*model.EnvVar) LoadFunc {
 	return func(ctx context.Context) ([]*model.EnvVar, error) {
 		logger := ctxlog.From(ctx)
 
 		// Load both .env.yaml and .env.yml if they exist
-		config, err := loadAndMergeYAMLFiles(ctx, path)
+		config, err := loadAndMergeYAMLFiles(ctx, path, mustExist)
 		if err != nil {
 			return nil, err
 		}
@@ -97,14 +103,16 @@ func NewYAMLLoaderWithProfile(path string, profile string, existingVars ...[]*mo
 	}
 }
 
-// loadAndMergeYAMLFiles loads both .env.yaml and .env.yml if they exist and merges them
-func loadAndMergeYAMLFiles(ctx context.Context, path string) (model.YAMLConfig, error) {
+// loadAndMergeYAMLFiles loads both .env.yaml and .env.yml if they exist and merges them.
+// When mustExist is true and neither candidate file exists, a ConfigFileError with
+// ReasonNotFound is returned (using the .yaml candidate as the representative path).
+func loadAndMergeYAMLFiles(ctx context.Context, path string, mustExist bool) (model.YAMLConfig, error) {
 	logger := ctxlog.From(ctx)
 
 	// Helper function to load a single YAML file
 	loadOneFile := func(filePath string) (model.YAMLConfig, bool, error) {
 		if _, err := os.Stat(filePath); err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, fs.ErrNotExist) {
 				return nil, false, nil // File not found is acceptable
 			}
 			return nil, false, &model.ConfigFileError{
@@ -166,8 +174,18 @@ func loadAndMergeYAMLFiles(ctx context.Context, path string) (model.YAMLConfig, 
 		}
 	}
 
-	// If neither file exists, return nil
+	// If neither file exists, either error (when the caller insisted the file
+	// must exist) or stay silent (default-discovery mode). The reported Path
+	// is the original user-supplied path so the error message matches what
+	// the user actually typed (e.g. "config.yml" instead of "config.yaml").
 	if !found1 && !found2 {
+		if mustExist {
+			return nil, &model.ConfigFileError{
+				Path:   path,
+				Format: model.FormatYAML,
+				Reason: model.ReasonNotFound,
+			}
+		}
 		logger.Debug("no YAML files found", "yaml_path", yamlPath, "yml_path", ymlPath)
 		return nil, nil
 	}
