@@ -11,6 +11,7 @@ jobs:
     env:
       GO111MODULE: on
     steps:
+      - uses: cicd-sensor/cicd-sensor-action@6ee257338e68af2b279b321b3346fe5f385aa498 # v0.0.29
       - name: Checkout Source
         uses: actions/checkout@v2
       - name: Run Gosec Security Scanner
