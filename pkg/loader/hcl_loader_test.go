@@ -118,6 +118,36 @@ func TestHCLLoaderSyntaxError(t *testing.T) {
 	loadFunc := newHCLLoader(path)
 	_, err := loadFunc(context.Background())
 	gt.Error(t, err)
+
+	var cfgErr *model.ConfigFileError
+	gt.True(t, errors.As(err, &cfgErr))
+	gt.Equal(t, cfgErr.Reason, model.ReasonParseError)
+}
+
+// A parse failure must point the user at the offending location with a source
+// snippet and a caret, not just a one-line summary.
+func TestHCLLoaderSyntaxErrorDetail(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "broken.hcl")
+	// An unterminated string spanning two physical lines: HCL reports an
+	// "Invalid multi-line string" with remediation prose.
+	gt.NoError(t, os.WriteFile(path, []byte("FOO = \"bar\nBAZ = \"qux\"\n"), 0600))
+
+	loadFunc := newHCLLoader(path)
+	_, err := loadFunc(context.Background())
+	gt.Error(t, err)
+
+	var cfgErr *model.ConfigFileError
+	gt.True(t, errors.As(err, &cfgErr))
+	gt.Equal(t, cfgErr.Reason, model.ReasonParseError)
+
+	// Location, the offending source line, the caret and HCL's remediation
+	// prose must all be present.
+	gt.S(t, cfgErr.Detail).
+		Contains("line 1").
+		Contains(`FOO = "bar`).
+		Contains("^").
+		Contains("multi-line")
 }
 
 func TestHCLLoaderDuplicateName(t *testing.T) {

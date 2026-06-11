@@ -257,6 +257,13 @@ func describeNode(err error, w *errWriter, isFirstCause bool) (string, bool, err
 	var cfe *model.ConfigFileError
 	if errors.As(err, &cfe) && cfe == err {
 		label := w.writeCyan(causeLabel(isFirstCause))
+		// A parse error carries a multi-line diagnostic (location + source
+		// snippet + caret). The header already names the format and the Source
+		// line the path, so print the detail directly instead of cfe.Error(),
+		// which would restate "cannot parse <fmt> file <path>:" before it.
+		if cfe.Reason == model.ReasonParseError && cfe.Detail != "" {
+			return label + cfe.Detail, true, cfe.Cause
+		}
 		line := label + cfe.Error()
 		return line, true, cfe.Cause
 	}
