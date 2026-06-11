@@ -262,7 +262,15 @@ func describeNode(err error, w *errWriter, isFirstCause bool) (string, bool, err
 		// line the path, so print the detail directly instead of cfe.Error(),
 		// which would restate "cannot parse <fmt> file <path>:" before it.
 		if cfe.Reason == model.ReasonParseError && cfe.Detail != "" {
-			return label + cfe.Detail, true, cfe.Cause
+			// writeLine only indents the first line, so the source snippet and
+			// caret would otherwise print flush-left. Indent continuation lines
+			// to keep the whole diagnostic block aligned under the cause label.
+			indent := "  "
+			if !isFirstCause {
+				indent = "    "
+			}
+			detail := strings.ReplaceAll(cfe.Detail, "\n", "\n"+indent)
+			return label + detail, true, cfe.Cause
 		}
 		line := label + cfe.Error()
 		return line, true, cfe.Cause

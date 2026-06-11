@@ -181,8 +181,10 @@ func renderHCLDiagnostics(diags hcl.Diagnostics, src []byte) string {
 
 	var b strings.Builder
 	for i, d := range diags {
+		// Separate diagnostics with a blank line so a multi-diagnostic report
+		// does not read as one dense block.
 		if i > 0 {
-			b.WriteString("\n")
+			b.WriteString("\n\n")
 		}
 
 		if d.Subject != nil {
@@ -196,9 +198,13 @@ func renderHCLDiagnostics(diags hcl.Diagnostics, src []byte) string {
 			b.WriteString(snippet)
 		}
 
+		// HCL's remediation prose is usually a single line, but indent every
+		// line so a multi-line detail stays aligned under its diagnostic.
 		if d.Detail != "" {
-			b.WriteString("\n    ")
-			b.WriteString(d.Detail)
+			for line := range strings.SplitSeq(d.Detail, "\n") {
+				b.WriteString("\n    ")
+				b.WriteString(line)
+			}
 		}
 	}
 	return b.String()
@@ -212,7 +218,11 @@ func hclSnippet(srcLines []string, rng *hcl.Range) string {
 	if rng == nil || rng.Start.Line < 1 || rng.Start.Line > len(srcLines) {
 		return ""
 	}
-	line := strings.ReplaceAll(srcLines[rng.Start.Line-1], "\t", " ")
+	// Strip a trailing CR so CRLF-terminated source lines do not emit a stray
+	// carriage return that scrambles the rendered snippet, then expand tabs to
+	// a single space so the caret column stays aligned with the text.
+	line := strings.TrimSuffix(srcLines[rng.Start.Line-1], "\r")
+	line = strings.ReplaceAll(line, "\t", " ")
 
 	caretCol := max(rng.Start.Column, 1)
 	caretLen := 1
