@@ -7,7 +7,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/m-mizutani/ctxlog"
@@ -130,7 +132,11 @@ func loadHCLFile(ctx context.Context, path string, mustExist bool) (model.YAMLCo
 			Path:   path,
 			Format: model.FormatHCL,
 			Reason: model.ReasonParseError,
-			Detail: diags.Error(),
+			// diags.Error() collapses multiple diagnostics to "first, and N
+			// other(s)" and never shows the offending source line, so render
+			// each diagnostic with its location, a source snippet and a caret
+			// instead — that is what makes a parse failure actionable.
+			Detail: renderHCLDiagnostics(diags, data),
 		}
 	}
 
@@ -162,6 +168,76 @@ func loadHCLFile(ctx context.Context, path string, mustExist bool) (model.YAMLCo
 		}
 	}
 	return cfg, nil
+}
+
+// renderHCLDiagnostics turns parse diagnostics into a multi-line, human-readable
+// report. Each diagnostic shows its location, the offending source line and a
+// caret pointing at the column, followed by HCL's own remediation prose. We hand-
+// roll this instead of using hcl.NewDiagnosticTextWriter so the output nests
+// cleanly under the CLI error formatter (no duplicated "Error:" headers or file
+// paths, both of which the formatter already prints).
+func renderHCLDiagnostics(diags hcl.Diagnostics, src []byte) string {
+	srcLines := strings.Split(string(src), "\n")
+
+	var b strings.Builder
+	for i, d := range diags {
+		// Separate diagnostics with a blank line so a multi-diagnostic report
+		// does not read as one dense block.
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+
+		if d.Subject != nil {
+			fmt.Fprintf(&b, "line %d, column %d: %s", d.Subject.Start.Line, d.Subject.Start.Column, d.Summary)
+		} else {
+			b.WriteString(d.Summary)
+		}
+
+		if snippet := hclSnippet(srcLines, d.Subject); snippet != "" {
+			b.WriteString("\n")
+			b.WriteString(snippet)
+		}
+
+		// HCL's remediation prose is usually a single line, but indent every
+		// line so a multi-line detail stays aligned under its diagnostic.
+		if d.Detail != "" {
+			for line := range strings.SplitSeq(d.Detail, "\n") {
+				b.WriteString("\n    ")
+				b.WriteString(line)
+			}
+		}
+	}
+	return b.String()
+}
+
+// hclSnippet renders the source line referenced by rng plus a caret line
+// underneath it. Tabs are expanded to a single space so the caret column stays
+// aligned with the rendered text. Returns "" when the range is missing or
+// points outside the available source.
+func hclSnippet(srcLines []string, rng *hcl.Range) string {
+	if rng == nil || rng.Start.Line < 1 || rng.Start.Line > len(srcLines) {
+		return ""
+	}
+	// Strip a trailing CR so CRLF-terminated source lines do not emit a stray
+	// carriage return that scrambles the rendered snippet, then expand tabs to
+	// a single space so the caret column stays aligned with the text.
+	line := strings.TrimSuffix(srcLines[rng.Start.Line-1], "\r")
+	line = strings.ReplaceAll(line, "\t", " ")
+
+	caretCol := max(rng.Start.Column, 1)
+	caretLen := 1
+	// A single-line range tells us how many columns the offending token spans.
+	if rng.End.Line == rng.Start.Line && rng.End.Column > rng.Start.Column {
+		caretLen = rng.End.Column - rng.Start.Column
+	}
+
+	var b strings.Builder
+	b.WriteString("    ")
+	b.WriteString(line)
+	b.WriteString("\n    ")
+	b.WriteString(strings.Repeat(" ", caretCol-1))
+	b.WriteString(strings.Repeat("^", caretLen))
+	return b.String()
 }
 
 // parseHCLBody converts the top-level body of an HCL file into a YAMLConfig.
