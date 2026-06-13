@@ -38,9 +38,11 @@ func splitSecretFragment(ref string) (path string, jsonKey string) {
 	return ref, ""
 }
 
-// extractJSONField parses raw as a JSON object and returns the string value at
-// key. It errors when raw is not a JSON object, the key is absent, or the value
-// is not a string.
+// extractJSONField parses raw as a JSON object and returns the value at key as
+// a string. String fields are returned verbatim; other scalars (numbers,
+// booleans) and nested structures are rendered to their JSON representation so
+// that, e.g., {"port":5432} yields "5432". It errors when raw is not a JSON
+// object or the key is absent.
 func extractJSONField(raw, key string) (string, error) {
 	var obj map[string]any
 	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
@@ -50,11 +52,17 @@ func extractJSONField(raw, key string) (string, error) {
 	if !ok {
 		return "", goerr.New("JSON key not found in secret value", goerr.V("key", key))
 	}
-	s, ok := val.(string)
-	if !ok {
-		return "", goerr.New("JSON field is not a string", goerr.V("key", key))
+	if val == nil {
+		return "", nil
 	}
-	return s, nil
+	if s, ok := val.(string); ok {
+		return s, nil
+	}
+	b, err := json.Marshal(val)
+	if err != nil {
+		return "", goerr.Wrap(err, "failed to marshal JSON field value", goerr.V("key", key))
+	}
+	return string(b), nil
 }
 
 // isAWSSecretARN reports whether ref is a Secrets Manager ARN. Bare secret

@@ -81,9 +81,19 @@ func TestExtractJSONField(t *testing.T) {
 		gt.Error(t, err)
 	})
 
-	t.Run("non-string field errors", func(t *testing.T) {
-		_, err := loader.ExtractJSONField(`{"port":5432}`, "port")
-		gt.Error(t, err)
+	t.Run("non-string scalar is converted to string", func(t *testing.T) {
+		v := gt.R1(loader.ExtractJSONField(`{"port":5432}`, "port")).NoError(t)
+		gt.Equal(t, v, "5432")
+	})
+
+	t.Run("boolean field is converted to string", func(t *testing.T) {
+		v := gt.R1(loader.ExtractJSONField(`{"enabled":true}`, "enabled")).NoError(t)
+		gt.Equal(t, v, "true")
+	})
+
+	t.Run("null field becomes empty string", func(t *testing.T) {
+		v := gt.R1(loader.ExtractJSONField(`{"opt":null}`, "opt")).NoError(t)
+		gt.Equal(t, v, "")
 	})
 }
 
