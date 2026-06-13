@@ -182,6 +182,35 @@ func TestCommandExecError(t *testing.T) {
 	})
 }
 
+func TestSecretError(t *testing.T) {
+	t.Run("formats provider and ref", func(t *testing.T) {
+		err := &model.SecretError{
+			Provider: model.SecretProviderAWS,
+			Ref:      "prod/db/password",
+		}
+		gt.S(t, err.Error()).
+			Contains("AWS Secrets Manager").
+			Contains("prod/db/password")
+	})
+
+	t.Run("includes json key when present", func(t *testing.T) {
+		err := &model.SecretError{
+			Provider: model.SecretProviderGCP,
+			Ref:      "projects/p/secrets/s/versions/latest",
+			JSONKey:  "host",
+		}
+		gt.S(t, err.Error()).
+			Contains("GCP Secret Manager").
+			Contains("host")
+	})
+
+	t.Run("unwraps cause", func(t *testing.T) {
+		cause := errors.New("access denied")
+		err := &model.SecretError{Provider: model.SecretProviderAWS, Ref: "x", Cause: cause}
+		gt.True(t, errors.Is(err, cause))
+	})
+}
+
 func TestCommandLaunchError(t *testing.T) {
 	t.Run("not-found message includes executable name", func(t *testing.T) {
 		err := &model.CommandLaunchError{

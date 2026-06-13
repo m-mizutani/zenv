@@ -452,7 +452,7 @@ REFS_ONLY:
 		loadFunc := newYAMLLoader(tmpFile.Name())
 		_, err := loadFunc(context.Background())
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("refs can only be used with value or command")
+		gt.S(t, err.Error()).Contains("refs can only be used with value")
 	})
 
 	t.Run("Template with multiple value types", func(t *testing.T) {

@@ -161,7 +161,59 @@ func TestYAMLValue_Validate(t *testing.T) {
 		v := model.YAMLValue{Refs: []string{"NAME"}}
 		err := v.Validate()
 		gt.Error(t, err)
-		gt.S(t, err.Error()).Contains("refs can only be used with value or command")
+		gt.S(t, err.Error()).Contains("refs can only be used with value")
+	})
+
+	t.Run("valid aws_secret", func(t *testing.T) {
+		s := "prod/db/password#password"
+		v := model.YAMLValue{AWSSecret: &s}
+		gt.NoError(t, v.Validate())
+	})
+
+	t.Run("valid gcp_secret", func(t *testing.T) {
+		s := "projects/p/secrets/s/versions/latest"
+		v := model.YAMLValue{GCPSecret: &s}
+		gt.NoError(t, v.Validate())
+	})
+
+	t.Run("refs with aws_secret is valid", func(t *testing.T) {
+		s := "{{ .ENV }}/db/password"
+		v := model.YAMLValue{AWSSecret: &s, Refs: []string{"ENV"}}
+		gt.NoError(t, v.Validate())
+	})
+
+	t.Run("empty aws_secret error", func(t *testing.T) {
+		s := ""
+		v := model.YAMLValue{AWSSecret: &s}
+		err := v.Validate()
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("aws_secret must not be empty")
+	})
+
+	t.Run("empty gcp_secret error", func(t *testing.T) {
+		s := ""
+		v := model.YAMLValue{GCPSecret: &s}
+		err := v.Validate()
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("gcp_secret must not be empty")
+	})
+
+	t.Run("aws_secret with value is multiple types error", func(t *testing.T) {
+		val := "x"
+		s := "prod/db/password"
+		v := model.YAMLValue{Value: &val, AWSSecret: &s}
+		err := v.Validate()
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("multiple value types specified")
+	})
+
+	t.Run("aws_secret and gcp_secret together is multiple types error", func(t *testing.T) {
+		a := "prod/db/password"
+		g := "projects/p/secrets/s/versions/latest"
+		v := model.YAMLValue{AWSSecret: &a, GCPSecret: &g}
+		err := v.Validate()
+		gt.Error(t, err)
+		gt.S(t, err.Error()).Contains("multiple value types specified")
 	})
 }
 
@@ -196,6 +248,18 @@ func TestYAMLValue_IsEmpty(t *testing.T) {
 
 	t.Run("with refs", func(t *testing.T) {
 		v := &model.YAMLValue{Refs: []string{"NAME"}}
+		gt.False(t, v.IsEmpty())
+	})
+
+	t.Run("with aws_secret", func(t *testing.T) {
+		s := "prod/db/password"
+		v := &model.YAMLValue{AWSSecret: &s}
+		gt.False(t, v.IsEmpty())
+	})
+
+	t.Run("with gcp_secret", func(t *testing.T) {
+		s := "projects/p/secrets/s/versions/latest"
+		v := &model.YAMLValue{GCPSecret: &s}
 		gt.False(t, v.IsEmpty())
 	})
 

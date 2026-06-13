@@ -46,7 +46,7 @@ func NewHCLLoaderWithProfile(path string, profile string, mustExist bool, existi
 
 		// Reuse the YAML resolver since the in-memory representation is identical.
 		baseDir := filepath.Dir(path)
-		resolver := newYAMLUnifiedResolverWithProfileAndVars(config, profile, baseDir, allExistingVars)
+		resolver := newYAMLUnifiedResolverWithProfileAndVars(ctx, config, profile, baseDir, allExistingVars)
 
 		var envVars []*model.EnvVar
 		for key, value := range config {
@@ -305,6 +305,18 @@ func parseValueBlock(body *hclsyntax.Body) (model.YAMLValue, error) {
 				return v, goerr.Wrap(err, "invalid alias attribute")
 			}
 			v.Alias = s
+		case "aws_secret":
+			s, err := evalStringAttr(attr)
+			if err != nil {
+				return v, goerr.Wrap(err, "invalid aws_secret attribute")
+			}
+			v.AWSSecret = s
+		case "gcp_secret":
+			s, err := evalStringAttr(attr)
+			if err != nil {
+				return v, goerr.Wrap(err, "invalid gcp_secret attribute")
+			}
+			v.GCPSecret = s
 		case "command":
 			arr, err := evalStringSliceAttr(attr)
 			if err != nil {

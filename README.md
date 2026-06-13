@@ -175,6 +175,61 @@ BUILD_TIME:
     - "+%Y-%m-%d"
 ```
 
+#### Secret Manager References (AWS / GCP)
+Fetch values directly from AWS Secrets Manager or GCP Secret Manager. Each
+reference is a single path string; authentication uses the standard credential
+chain of the respective SDK (AWS: environment variables / shared config / IAM
+role, GCP: Application Default Credentials). No credential options are
+configured in `zenv` itself.
+
+```yaml
+# AWS Secrets Manager (secret name; region resolved from the SDK's default)
+DB_PASSWORD:
+  aws_secret: "prod/db/password"
+  secret: true
+
+# AWS with an ARN — the region is taken from the ARN
+DB_HOST:
+  aws_secret: "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:prod/db/conn"
+
+# GCP Secret Manager (full resource path including the version)
+API_TOKEN:
+  gcp_secret: "projects/my-project/secrets/api-token/versions/latest"
+  secret: true
+```
+
+When the stored secret is a JSON document, append `#<field>` to extract a single
+string field:
+
+```yaml
+# Secret value: {"host":"db.example.com","password":"s3cret"}
+DB_HOST:
+  aws_secret: "prod/db/conn#host"        # -> db.example.com
+
+DB_PASSWORD:
+  aws_secret: "prod/db/conn#password"    # -> s3cret
+  secret: true
+```
+
+`aws_secret` / `gcp_secret` also support `refs`, so the path itself can
+interpolate other variables:
+
+```yaml
+ENV: "prod"
+
+DB_PASSWORD:
+  aws_secret: "{{ .ENV }}/db/password"
+  refs:
+    - ENV
+```
+
+Notes:
+- AWS: a version-pinned secret is selected by passing a version-qualified ARN;
+  otherwise `AWSCURRENT` is used.
+- GCP: the path must include `/versions/<version>` (use `latest` for the most
+  recent version). A path without a version defaults to `latest`.
+- These value sources are available in both YAML and HCL configuration files.
+
 #### Variable References (Alias)
 Reference other variables or system environment variables:
 ```yaml
@@ -299,9 +354,11 @@ In the pty path the child's stdout/stderr share a single pty, so any ANSI contro
 - `file`: Read content from a file path
 - `command`: Execute command and use output
 - `alias`: Reference another variable
+- `aws_secret`: Fetch a value from AWS Secrets Manager (`<secret_id_or_arn>[#<json_key>]`)
+- `gcp_secret`: Fetch a value from GCP Secret Manager (`projects/.../versions/<version>[#<json_key>]`)
 
 **Additional Options:**
-- `refs`: List of variables to reference in templates (used with `value` or `command`)
+- `refs`: List of variables to reference in templates (used with `value`, `command`, `aws_secret`, or `gcp_secret`)
 - `profiles`: Environment-specific overrides (dev, staging, prod, etc.)
 
 **Important Notes:**
