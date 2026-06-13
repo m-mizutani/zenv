@@ -98,6 +98,20 @@ func TestARNRegion(t *testing.T) {
 	})
 }
 
+func TestIsAWSSecretARN(t *testing.T) {
+	t.Run("full ARN is accepted", func(t *testing.T) {
+		gt.True(t, loader.IsAWSSecretARN("arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:prod/db/pw"))
+	})
+
+	t.Run("bare name is rejected", func(t *testing.T) {
+		gt.False(t, loader.IsAWSSecretARN("prod/db/password"))
+	})
+
+	t.Run("non-secretsmanager ARN is rejected", func(t *testing.T) {
+		gt.False(t, loader.IsAWSSecretARN("arn:aws:s3:::my-bucket/key"))
+	})
+}
+
 // writeConfig writes content to a file under a fresh temp dir and returns its path.
 func writeConfig(t *testing.T, name, content string) string {
 	t.Helper()
@@ -108,11 +122,14 @@ func writeConfig(t *testing.T, name, content string) string {
 }
 
 func TestSecretResolutionYAML(t *testing.T) {
+	const (
+		pwARN   = "arn:aws:secretsmanager:ap-northeast-1:1:secret:prod/db/password"
+		connARN = "arn:aws:secretsmanager:ap-northeast-1:1:secret:prod/db/conn"
+	)
 	provider := &mockSecretProvider{
 		aws: map[string]string{
-			"prod/db/password": "raw-aws-secret",
-			"prod/db/conn":     `{"host":"db.example.com","port":"5432"}`,
-			"arn:aws:secretsmanager:ap-northeast-1:1:secret:k": "arn-secret",
+			pwARN:   "raw-aws-secret",
+			connARN: `{"host":"db.example.com","port":"5432"}`,
 		},
 		gcp: map[string]string{
 			"projects/p/secrets/token/versions/latest": "raw-gcp-secret",
@@ -121,8 +138,8 @@ func TestSecretResolutionYAML(t *testing.T) {
 	restore := loader.SetSecretProvider(provider)
 	defer restore()
 
-	t.Run("AWS raw secret", func(t *testing.T) {
-		path := writeConfig(t, ".env.yaml", "DB_PW:\n  aws_secret: prod/db/password\n  secret: true\n")
+	t.Run("AWS raw secret via ARN", func(t *testing.T) {
+		path := writeConfig(t, ".env.yaml", "DB_PW:\n  aws_secret: "+pwARN+"\n  secret: true\n")
 		envVars := gt.R1(loader.NewYAMLLoader(path, true)(context.Background())).NoError(t)
 		gt.Equal(t, len(envVars), 1)
 		gt.Equal(t, envVars[0].Name, "DB_PW")
@@ -131,15 +148,18 @@ func TestSecretResolutionYAML(t *testing.T) {
 	})
 
 	t.Run("AWS JSON field extraction", func(t *testing.T) {
-		path := writeConfig(t, ".env.yaml", "DB_HOST:\n  aws_secret: prod/db/conn#host\n")
+		path := writeConfig(t, ".env.yaml", "DB_HOST:\n  aws_secret: "+connARN+"#host\n")
 		envVars := gt.R1(loader.NewYAMLLoader(path, true)(context.Background())).NoError(t)
 		gt.Equal(t, envVars[0].Value, "db.example.com")
 	})
 
-	t.Run("AWS ARN reference", func(t *testing.T) {
-		path := writeConfig(t, ".env.yaml", "K:\n  aws_secret: arn:aws:secretsmanager:ap-northeast-1:1:secret:k\n")
-		envVars := gt.R1(loader.NewYAMLLoader(path, true)(context.Background())).NoError(t)
-		gt.Equal(t, envVars[0].Value, "arn-secret")
+	t.Run("bare AWS name is rejected", func(t *testing.T) {
+		path := writeConfig(t, ".env.yaml", "DB_PW:\n  aws_secret: prod/db/password\n")
+		_, err := loader.NewYAMLLoader(path, true)(context.Background())
+		gt.Error(t, err)
+		var se *model.SecretError
+		gt.True(t, errors.As(err, &se))
+		gt.S(t, err.Error()).Contains("ARN")
 	})
 
 	t.Run("GCP resource path", func(t *testing.T) {
@@ -150,7 +170,8 @@ func TestSecretResolutionYAML(t *testing.T) {
 
 	t.Run("refs expand in secret path", func(t *testing.T) {
 		path := writeConfig(t, ".env.yaml",
-			"ENV:\n  value: prod\nDB_PW:\n  aws_secret: \"{{.ENV}}/db/password\"\n  refs: [ENV]\n")
+			"REGION:\n  value: ap-northeast-1\n"+
+				"DB_PW:\n  aws_secret: \"arn:aws:secretsmanager:{{.REGION}}:1:secret:prod/db/password\"\n  refs: [REGION]\n")
 		envVars := gt.R1(loader.NewYAMLLoader(path, true)(context.Background())).NoError(t)
 		var dbpw string
 		for _, e := range envVars {
@@ -162,17 +183,18 @@ func TestSecretResolutionYAML(t *testing.T) {
 	})
 
 	t.Run("fetch error surfaces as SecretError", func(t *testing.T) {
-		path := writeConfig(t, ".env.yaml", "MISSING:\n  aws_secret: no/such/secret\n")
+		missingARN := "arn:aws:secretsmanager:ap-northeast-1:1:secret:no/such/secret"
+		path := writeConfig(t, ".env.yaml", "MISSING:\n  aws_secret: "+missingARN+"\n")
 		_, err := loader.NewYAMLLoader(path, true)(context.Background())
 		gt.Error(t, err)
 		var se *model.SecretError
 		gt.True(t, errors.As(err, &se))
 		gt.Equal(t, se.Provider, model.SecretProviderAWS)
-		gt.Equal(t, se.Ref, "no/such/secret")
+		gt.Equal(t, se.Ref, missingARN)
 	})
 
 	t.Run("JSON extraction error surfaces as SecretError", func(t *testing.T) {
-		path := writeConfig(t, ".env.yaml", "X:\n  aws_secret: prod/db/password#missing\n")
+		path := writeConfig(t, ".env.yaml", "X:\n  aws_secret: "+connARN+"#missing\n")
 		_, err := loader.NewYAMLLoader(path, true)(context.Background())
 		gt.Error(t, err)
 		var se *model.SecretError
@@ -182,15 +204,16 @@ func TestSecretResolutionYAML(t *testing.T) {
 }
 
 func TestSecretResolutionHCL(t *testing.T) {
+	const connARN = "arn:aws:secretsmanager:ap-northeast-1:1:secret:prod/db/conn"
 	provider := &mockSecretProvider{
-		aws: map[string]string{"prod/db/conn": `{"host":"db.example.com"}`},
+		aws: map[string]string{connARN: `{"host":"db.example.com"}`},
 		gcp: map[string]string{"projects/p/secrets/token/versions/latest": "raw-gcp-secret"},
 	}
 	restore := loader.SetSecretProvider(provider)
 	defer restore()
 
 	t.Run("AWS secret with JSON key in HCL", func(t *testing.T) {
-		path := writeConfig(t, ".env.hcl", "DB_HOST {\n  aws_secret = \"prod/db/conn#host\"\n}\n")
+		path := writeConfig(t, ".env.hcl", "DB_HOST {\n  aws_secret = \""+connARN+"#host\"\n}\n")
 		envVars := gt.R1(loader.NewHCLLoader(path, true)(context.Background())).NoError(t)
 		gt.Equal(t, len(envVars), 1)
 		gt.Equal(t, envVars[0].Name, "DB_HOST")

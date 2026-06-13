@@ -7,6 +7,7 @@ var (
 	SplitSecretFragment = splitSecretFragment
 	ExtractJSONField    = extractJSONField
 	ARNRegion           = arnRegion
+	IsAWSSecretARN      = isAWSSecretARN
 )
 
 // SetSecretProvider overrides the default secret provider used by resolvers and

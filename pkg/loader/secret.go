@@ -57,9 +57,15 @@ func extractJSONField(raw, key string) (string, error) {
 	return s, nil
 }
 
+// isAWSSecretARN reports whether ref is a Secrets Manager ARN. Bare secret
+// names are rejected at resolution time so the target region and account are
+// always explicit.
+func isAWSSecretARN(ref string) bool {
+	return strings.HasPrefix(ref, "arn:aws:secretsmanager:")
+}
+
 // arnRegion extracts the region segment from an AWS ARN. It returns an empty
-// string when ref is not an ARN, so the SDK's default region resolution is used
-// for bare secret names.
+// string when ref is not an ARN.
 func arnRegion(ref string) string {
 	if !strings.HasPrefix(ref, "arn:") {
 		return ""

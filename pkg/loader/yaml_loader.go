@@ -679,6 +679,17 @@ func (r *yamlUnifiedResolver) resolveSecret(provider model.SecretProvider, ref s
 	var err error
 	switch provider {
 	case model.SecretProviderAWS:
+		// Require an ARN so the target region and account are unambiguous; a bare
+		// friendly name would silently resolve against the SDK's default region
+		// and is easy to point at the wrong secret.
+		if !isAWSSecretARN(path) {
+			return "", &model.SecretError{
+				Provider: provider,
+				Ref:      path,
+				JSONKey:  jsonKey,
+				Cause:    goerr.New("aws_secret must be a full ARN (arn:aws:secretsmanager:...), not a bare secret name"),
+			}
+		}
 		raw, err = r.secret.GetAWSSecret(r.ctx, path)
 	case model.SecretProviderGCP:
 		raw, err = r.secret.GetGCPSecret(r.ctx, path)

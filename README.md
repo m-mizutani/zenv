@@ -182,15 +182,14 @@ chain of the respective SDK (AWS: environment variables / shared config / IAM
 role, GCP: Application Default Credentials). No credential options are
 configured in `zenv` itself.
 
-```yaml
-# AWS Secrets Manager (secret name; region resolved from the SDK's default)
-DB_PASSWORD:
-  aws_secret: "prod/db/password"
-  secret: true
+AWS secrets **must be referenced by their full ARN** (a bare secret name is
+rejected) so the target region and account are always explicit.
 
-# AWS with an ARN — the region is taken from the ARN
-DB_HOST:
-  aws_secret: "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:prod/db/conn"
+```yaml
+# AWS Secrets Manager — full ARN required; the region is taken from the ARN
+DB_PASSWORD:
+  aws_secret: "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:prod/db/password"
+  secret: true
 
 # GCP Secret Manager (full resource path including the version)
 API_TOKEN:
@@ -204,10 +203,10 @@ string field:
 ```yaml
 # Secret value: {"host":"db.example.com","password":"s3cret"}
 DB_HOST:
-  aws_secret: "prod/db/conn#host"        # -> db.example.com
+  aws_secret: "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:prod/db/conn#host"      # -> db.example.com
 
 DB_PASSWORD:
-  aws_secret: "prod/db/conn#password"    # -> s3cret
+  aws_secret: "arn:aws:secretsmanager:ap-northeast-1:123456789012:secret:prod/db/conn#password"  # -> s3cret
   secret: true
 ```
 
@@ -215,17 +214,18 @@ DB_PASSWORD:
 interpolate other variables:
 
 ```yaml
-ENV: "prod"
+REGION: "ap-northeast-1"
 
 DB_PASSWORD:
-  aws_secret: "{{ .ENV }}/db/password"
+  aws_secret: "arn:aws:secretsmanager:{{ .REGION }}:123456789012:secret:prod/db/password"
   refs:
-    - ENV
+    - REGION
 ```
 
 Notes:
-- AWS: a version-pinned secret is selected by passing a version-qualified ARN;
-  otherwise `AWSCURRENT` is used.
+- AWS: the reference must be a full ARN (`arn:aws:secretsmanager:...`); a bare
+  secret name is rejected. A version-pinned secret is selected by passing a
+  version-qualified ARN; otherwise `AWSCURRENT` is used.
 - GCP: the path must include `/versions/<version>` (use `latest` for the most
   recent version). A path without a version defaults to `latest`.
 - These value sources are available in both YAML and HCL configuration files.
@@ -354,7 +354,7 @@ In the pty path the child's stdout/stderr share a single pty, so any ANSI contro
 - `file`: Read content from a file path
 - `command`: Execute command and use output
 - `alias`: Reference another variable
-- `aws_secret`: Fetch a value from AWS Secrets Manager (`<secret_id_or_arn>[#<json_key>]`)
+- `aws_secret`: Fetch a value from AWS Secrets Manager (`<full_arn>[#<json_key>]`)
 - `gcp_secret`: Fetch a value from GCP Secret Manager (`projects/.../versions/<version>[#<json_key>]`)
 
 **Additional Options:**
