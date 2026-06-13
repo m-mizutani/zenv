@@ -261,6 +261,51 @@ func (e *CommandExecError) Error() string {
 
 func (e *CommandExecError) Unwrap() error { return e.Cause }
 
+// SecretProvider identifies which managed secret store a SecretError refers to.
+type SecretProvider int
+
+const (
+	SecretProviderAWS SecretProvider = iota
+	SecretProviderGCP
+)
+
+func (p SecretProvider) String() string {
+	switch p {
+	case SecretProviderAWS:
+		return "AWS Secrets Manager"
+	case SecretProviderGCP:
+		return "GCP Secret Manager"
+	default:
+		return "unknown secret manager"
+	}
+}
+
+// SecretError describes a failure to fetch or post-process a value from a
+// managed secret store (AWS Secrets Manager or GCP Secret Manager).
+type SecretError struct {
+	Provider SecretProvider
+	// Ref is the secret identifier as written in the configuration (secret name,
+	// ARN, or resource path), excluding any "#json_key" fragment.
+	Ref string
+	// JSONKey is the requested JSON field, empty when the raw value is used.
+	JSONKey string
+	Cause   error
+}
+
+func (e *SecretError) Error() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "failed to resolve %s secret %q", e.Provider.String(), e.Ref)
+	if e.JSONKey != "" {
+		fmt.Fprintf(&b, " (key %q)", e.JSONKey)
+	}
+	if e.Cause != nil {
+		fmt.Fprintf(&b, ": %v", e.Cause)
+	}
+	return b.String()
+}
+
+func (e *SecretError) Unwrap() error { return e.Cause }
+
 // LaunchReason classifies why the target command (the one zenv was asked to
 // run) could not be launched.
 type LaunchReason int

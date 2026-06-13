@@ -54,7 +54,7 @@ func NewYAMLLoaderWithProfile(path string, profile string, mustExist bool, exist
 
 		// Create unified resolver with existing variables
 		baseDir := filepath.Dir(path)
-		resolver := newYAMLUnifiedResolverWithProfileAndVars(config, profile, baseDir, allExistingVars)
+		resolver := newYAMLUnifiedResolverWithProfileAndVars(ctx, config, profile, baseDir, allExistingVars)
 
 		// Resolve all variables
 		var envVars []*model.EnvVar
@@ -246,9 +246,9 @@ func mergeYAMLConfigs(config1, config2 model.YAMLConfig) (model.YAMLConfig, erro
 
 // mergeYAMLValues merges two YAMLValue instances with conflict detection
 func mergeYAMLValues(key string, v1, v2 model.YAMLValue) (model.YAMLValue, error) {
-	// Check for value source conflicts (value, file, command, alias)
-	v1HasValueSource := v1.Value != nil || v1.File != nil || len(v1.Command) > 0 || v1.Alias != nil
-	v2HasValueSource := v2.Value != nil || v2.File != nil || len(v2.Command) > 0 || v2.Alias != nil
+	// Check for value source conflicts (value, file, command, alias, secrets)
+	v1HasValueSource := v1.Value != nil || v1.File != nil || len(v1.Command) > 0 || v1.Alias != nil || v1.AWSSecret != nil || v1.GCPSecret != nil
+	v2HasValueSource := v2.Value != nil || v2.File != nil || len(v2.Command) > 0 || v2.Alias != nil || v2.AWSSecret != nil || v2.GCPSecret != nil
 
 	if v1HasValueSource && v2HasValueSource {
 		// Both have value sources - check if they conflict
@@ -270,6 +270,16 @@ func mergeYAMLValues(key string, v1, v2 model.YAMLValue) (model.YAMLValue, error
 		if v1.Alias != nil && v2.Alias != nil {
 			return model.YAMLValue{}, goerr.New(
 				fmt.Sprintf("conflicting field \"alias\" for environment variable \"%s\" found in both .env.yaml and .env.yml", key),
+			)
+		}
+		if v1.AWSSecret != nil && v2.AWSSecret != nil {
+			return model.YAMLValue{}, goerr.New(
+				fmt.Sprintf("conflicting field \"aws_secret\" for environment variable \"%s\" found in both .env.yaml and .env.yml", key),
+			)
+		}
+		if v1.GCPSecret != nil && v2.GCPSecret != nil {
+			return model.YAMLValue{}, goerr.New(
+				fmt.Sprintf("conflicting field \"gcp_secret\" for environment variable \"%s\" found in both .env.yaml and .env.yml", key),
 			)
 		}
 		// Different value sources - this will be caught by Validate() later
@@ -302,6 +312,18 @@ func mergeYAMLValues(key string, v1, v2 model.YAMLValue) (model.YAMLValue, error
 		merged.Alias = v1.Alias
 	} else if v2.Alias != nil {
 		merged.Alias = v2.Alias
+	}
+
+	if v1.AWSSecret != nil {
+		merged.AWSSecret = v1.AWSSecret
+	} else if v2.AWSSecret != nil {
+		merged.AWSSecret = v2.AWSSecret
+	}
+
+	if v1.GCPSecret != nil {
+		merged.GCPSecret = v1.GCPSecret
+	} else if v2.GCPSecret != nil {
+		merged.GCPSecret = v2.GCPSecret
 	}
 
 	// Merge refs (deduplicate)
@@ -370,6 +392,7 @@ func executeYAMLCommand(command []string) (string, error) {
 
 // yamlUnifiedResolver handles resolution of all variable types with circular reference detection
 type yamlUnifiedResolver struct {
+	ctx          context.Context // Carried for secret-provider calls during resolution
 	config       model.YAMLConfig
 	profile      string
 	baseDir      string // Base directory for resolving relative file paths
@@ -377,9 +400,10 @@ type yamlUnifiedResolver struct {
 	resolving    map[string]bool   // Track variables currently being resolved
 	stack        []string          // Resolution order, used to report circular chains
 	externalVars map[string]string // Variables from .env files, system environment, and other sources
+	secret       SecretProvider    // Resolves aws_secret / gcp_secret references
 }
 
-func newYAMLUnifiedResolverWithProfileAndVars(config model.YAMLConfig, profile string, baseDir string, existingVars []*model.EnvVar) *yamlUnifiedResolver {
+func newYAMLUnifiedResolverWithProfileAndVars(ctx context.Context, config model.YAMLConfig, profile string, baseDir string, existingVars []*model.EnvVar) *yamlUnifiedResolver {
 	// Cache all external variables (system environment + .env files, etc.)
 	externalVars := make(map[string]string)
 
@@ -399,12 +423,14 @@ func newYAMLUnifiedResolverWithProfileAndVars(config model.YAMLConfig, profile s
 	}
 
 	return &yamlUnifiedResolver{
+		ctx:          ctx,
 		config:       config,
 		profile:      profile,
 		baseDir:      baseDir,
 		resolvedVars: make(map[string]string),
 		resolving:    make(map[string]bool),
 		externalVars: externalVars,
+		secret:       newSecretProvider(),
 	}
 }
 
@@ -615,9 +641,85 @@ func (r *yamlUnifiedResolver) resolveWithValue(key string, config *model.YAMLVal
 				Cause:  err,
 			}
 		}
+
+	case config.AWSSecret != nil:
+		resolvedValue, err = r.resolveSecret(model.SecretProviderAWS, *config.AWSSecret, config.Refs)
+		if err != nil {
+			return "", err
+		}
+
+	case config.GCPSecret != nil:
+		resolvedValue, err = r.resolveSecret(model.SecretProviderGCP, *config.GCPSecret, config.Refs)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	// Cache the resolved value
 	r.resolvedVars[key] = resolvedValue
 	return resolvedValue, nil
+}
+
+// resolveSecret fetches a value from a managed secret store. The reference is
+// first expanded against refs (so secret paths can interpolate other
+// variables), then split into "<path>#<json_key>"; when a JSON key is present
+// the fetched payload is decoded and the named string field is extracted.
+func (r *yamlUnifiedResolver) resolveSecret(provider model.SecretProvider, ref string, refs []string) (string, error) {
+	if len(refs) > 0 {
+		expanded, err := r.expandTemplate(ref, refs)
+		if err != nil {
+			return "", err
+		}
+		ref = expanded
+	}
+
+	path, jsonKey := splitSecretFragment(ref)
+
+	var raw string
+	var err error
+	switch provider {
+	case model.SecretProviderAWS:
+		// Require an ARN so the target region and account are unambiguous; a bare
+		// friendly name would silently resolve against the SDK's default region
+		// and is easy to point at the wrong secret.
+		if !isAWSSecretARN(path) {
+			return "", &model.SecretError{
+				Provider: provider,
+				Ref:      path,
+				JSONKey:  jsonKey,
+				Cause:    goerr.New("aws_secret must be a full ARN (arn:aws:secretsmanager:...), not a bare secret name"),
+			}
+		}
+		raw, err = r.secret.GetAWSSecret(r.ctx, path)
+	case model.SecretProviderGCP:
+		raw, err = r.secret.GetGCPSecret(r.ctx, path)
+	}
+	if err != nil {
+		return "", &model.SecretError{Provider: provider, Ref: path, JSONKey: jsonKey, Cause: err}
+	}
+
+	if jsonKey != "" {
+		raw, err = extractJSONField(raw, jsonKey)
+		if err != nil {
+			return "", &model.SecretError{Provider: provider, Ref: path, JSONKey: jsonKey, Cause: err}
+		}
+	}
+	return raw, nil
+}
+
+// expandTemplate renders tmplStr as a text/template using the values of refs.
+func (r *yamlUnifiedResolver) expandTemplate(tmplStr string, refs []string) (string, error) {
+	context, err := r.buildTemplateContext(refs)
+	if err != nil {
+		return "", err
+	}
+	tmpl, err := template.New("secret").Parse(tmplStr)
+	if err != nil {
+		return "", &model.ResolveError{Op: model.OpTemplate, Target: tmplStr, Cause: err}
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, context); err != nil {
+		return "", &model.ResolveError{Op: model.OpTemplate, Target: tmplStr, Cause: err}
+	}
+	return buf.String(), nil
 }

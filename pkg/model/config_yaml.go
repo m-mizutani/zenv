@@ -18,6 +18,13 @@ type YAMLValue struct {
 	Command []string `yaml:"command,omitempty"`
 	// Alias references another environment variable
 	Alias *string `yaml:"alias,omitempty"`
+	// AWSSecret references a secret in AWS Secrets Manager. The format is
+	// "<secret_id>[#<json_key>]" where secret_id is a secret name or ARN and
+	// the optional #json_key extracts a field from a JSON-encoded secret.
+	AWSSecret *string `yaml:"aws_secret,omitempty"`
+	// GCPSecret references a secret in GCP Secret Manager. The format is
+	// "projects/{project}/secrets/{secret}/versions/{version}[#<json_key>]".
+	GCPSecret *string `yaml:"gcp_secret,omitempty"`
 	// Refs lists the environment variables referenced in value or command templates
 	Refs []string `yaml:"refs,omitempty"`
 	// Secret indicates the value should be masked in display output
@@ -34,6 +41,8 @@ func (v *YAMLValue) IsEmpty() bool {
 		v.File == nil &&
 		len(v.Command) == 0 &&
 		v.Alias == nil &&
+		v.AWSSecret == nil &&
+		v.GCPSecret == nil &&
 		len(v.Refs) == 0 &&
 		len(v.Profile) == 0
 }
@@ -57,9 +66,10 @@ func (v *YAMLValue) GetValueForProfile(profile string) *YAMLValue {
 // - Refs can only be used with value or command
 // - Nested profiles are not allowed
 func (v YAMLValue) Validate() error {
-	// Refs should only be used with value or command (check this first to give more specific error)
-	if v.Value == nil && len(v.Command) == 0 && len(v.Refs) > 0 {
-		return goerr.New("refs can only be used with value or command")
+	// Refs should only be used with value, command, or a secret reference
+	// (check this first to give more specific error)
+	if v.Value == nil && len(v.Command) == 0 && v.AWSSecret == nil && v.GCPSecret == nil && len(v.Refs) > 0 {
+		return goerr.New("refs can only be used with value, command, aws_secret, or gcp_secret")
 	}
 
 	count := 0
@@ -75,13 +85,27 @@ func (v YAMLValue) Validate() error {
 	if v.Alias != nil {
 		count++
 	}
+	if v.AWSSecret != nil {
+		count++
+	}
+	if v.GCPSecret != nil {
+		count++
+	}
 
 	// Allow empty values only if profile is present
 	if count == 0 && len(v.Profile) == 0 {
 		return goerr.New("no value specified")
 	}
 	if count > 1 {
-		return goerr.New("multiple value types specified (only one of value, file, command, or alias can be specified)")
+		return goerr.New("multiple value types specified (only one of value, file, command, alias, aws_secret, or gcp_secret can be specified)")
+	}
+
+	// A secret reference must not be an empty string.
+	if v.AWSSecret != nil && *v.AWSSecret == "" {
+		return goerr.New("aws_secret must not be empty")
+	}
+	if v.GCPSecret != nil && *v.GCPSecret == "" {
+		return goerr.New("gcp_secret must not be empty")
 	}
 
 	// Validate profile values

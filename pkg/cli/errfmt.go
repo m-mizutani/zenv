@@ -237,6 +237,16 @@ func describeNode(err error, w *errWriter, isFirstCause bool) (string, bool, err
 		return line, true, re.Cause
 	}
 
+	var se *model.SecretError
+	if errors.As(err, &se) && se == err {
+		label := w.writeCyan(causeLabel(isFirstCause))
+		line := label + fmt.Sprintf("%s lookup failed: %s", se.Provider.String(), se.Ref)
+		if se.JSONKey != "" {
+			line += fmt.Sprintf("  (key %q)", se.JSONKey)
+		}
+		return line, true, se.Cause
+	}
+
 	var cmd *model.CommandExecError
 	if errors.As(err, &cmd) && cmd == err {
 		label := w.writeCyan(causeLabel(isFirstCause))
@@ -347,6 +357,15 @@ func hintFor(err error, w *errWriter) string {
 	if errors.As(err, &cmd) {
 		line := "Hint:  ensure `" + strings.Join(cmd.Command, " ") + "` runs successfully in your shell"
 		return w.writeYellow(line)
+	}
+	var se *model.SecretError
+	if errors.As(err, &se) {
+		switch se.Provider {
+		case model.SecretProviderAWS:
+			return w.writeYellow("Hint:  check the secret name/ARN and that your AWS credentials and region can read it")
+		case model.SecretProviderGCP:
+			return w.writeYellow("Hint:  check the secret resource path and that your GCP credentials (ADC) can access it")
+		}
 	}
 	var ref *model.ReferenceError
 	if errors.As(err, &ref) && ref.Reason == model.RefNotFound {
