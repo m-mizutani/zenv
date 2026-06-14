@@ -34,10 +34,7 @@ release:
   draft: true
 
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^ci:"
-      - "^chore:"
+  # Delegate note generation to GitHub so the release shows the familiar
+  # "What's Changed" / "@user in #N" / "Full Changelog" format. Grouping and
+  # exclusions are then controlled by .github/release.yml, not here.
+  use: github-native
