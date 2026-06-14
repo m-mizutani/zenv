@@ -27,6 +27,12 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+release:
+  # Leave the GitHub release as a draft so assets can be reviewed before
+  # publishing. Publishing manually is also what makes the flow compatible
+  # with GitHub's immutable releases (the lock happens at publish time).
+  draft: true
+
 changelog:
   sort: asc
   filters:
